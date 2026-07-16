@@ -36,7 +36,10 @@ def detect_knockout(search_report: str, structured: dict | None = None) -> bool:
     """判断是否淘汰赛"""
     if structured and structured.get("scenario"):
         for s in structured["scenario"]:
-            if any(k in s.lower() for k in ["淘汰赛", "决赛", "半决赛", "knockout", "final", "semi"]):
+            if s and isinstance(s, str) and any(
+                k in s.lower() for k in [
+                    "淘汰赛", "决赛", "半决赛", "knockout", "final", "semi"
+                ]):
                 return True
 
     text = (search_report or "").lower()
