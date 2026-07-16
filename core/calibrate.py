@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import streamlit as st
 from core.config import (
     DEEPSEEK_KEY, DEEPSEEK_URL, SUPABASE_URL, SUPABASE_KEY,
-    MODEL_DEFAULT, MODEL_REASONING, PROMPT_CALIBRATE,
+    MODEL_FAST, MODEL_CALIBRATE, PROMPT_CALIBRATE,
 )
 from core.search import _deepseek_chat, search_post_match, extract_odds
 from core.models import MatchPrediction, CalibrationResult
@@ -76,7 +76,7 @@ def _extract_actual_score(post_report: str) -> tuple[int | None, int | None,
             '{"actual_h":2,"actual_a":1,"xG_h":1.8,"xG_a":0.7}\n'
             f"报告:\n{post_report[:4000]}"
         )
-        r = _deepseek_chat("", prompt, DEEPSEEK_KEY, MODEL_DEFAULT)
+        r = _deepseek_chat("", prompt, DEEPSEEK_KEY, MODEL_FAST)
         m = re.search(r'\{[\s\S]*\}', r)
         if m:
             d = json.loads(m.group())
@@ -181,7 +181,7 @@ def calibrate_record(record: dict, laws: list[dict],
             PROMPT_CALIBRATE,
             f"**【硬性规则】** {match_name} 已结束，直接给出最终比分。\n"
             f"赛前数据:\n{search_report[:3000]}",
-            key, MODEL_REASONING,
+            key, MODEL_CALIBRATE,
         )
 
     if "比赛尚未开始" in post_summary:
@@ -275,7 +275,7 @@ def calibrate_record(record: dict, laws: list[dict],
             '"fouls_h":12,"fouls_a":14,"passes_h":480,"passes_a":390}}\n'
             f"赛后数据:\n{post_summary[:4000]}"
         )
-        stats_raw = _deepseek_chat("", stats_prompt, key, {"model": "deepseek-chat"})
+        stats_raw = _deepseek_chat("", stats_prompt, key, MODEL_FAST)
         sm = re.search(r'\{[\s\S]*\}', stats_raw)
         if sm:
             stats_data = json.loads(sm.group()).get("stats", {})
@@ -320,7 +320,7 @@ def calibrate_record(record: dict, laws: list[dict],
         f"赛前报告:\n{analysis_report[:3000]}"
     )
 
-    cr = _deepseek_chat(PROMPT_CALIBRATE, calibrate_prompt, key, MODEL_REASONING)
+    cr = _deepseek_chat(PROMPT_CALIBRATE, calibrate_prompt, key, MODEL_CALIBRATE)
 
     # ── 提取偏差分析文本 ──
     bias_analysis = re.sub(r'```json[\s\S]*?```', '', cr).strip()

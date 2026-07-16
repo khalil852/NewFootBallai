@@ -13,8 +13,23 @@ DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 TAVILY_URL = "https://api.tavily.com/search"
 
 # ── Models ──
-MODEL_DEFAULT = {"model": "deepseek-chat"}
-MODEL_REASONING = {"model": "deepseek-chat", "reasoning_effort": "medium", "max_tokens": 4096}
+# deepseek-v4-flash: 快速，适合搜索汇总和报告格式化
+# deepseek-v4-pro:  更强推理，适合校准分析
+# thinking_mode=True: reasoning_effort="max" 开启深度思考
+
+MODEL_FAST = {"model": "deepseek-v4-flash"}
+MODEL_FAST_THINK = {"model": "deepseek-v4-flash", "reasoning_effort": "max", "max_tokens": 4096}
+MODEL_PRO = {"model": "deepseek-v4-pro"}
+MODEL_PRO_THINK = {"model": "deepseek-v4-pro", "reasoning_effort": "max", "max_tokens": 4096}
+
+# 各模块默认模型分配
+MODEL_SEARCH = MODEL_FAST          # 搜索汇总+结构化提取：快就行
+MODEL_ANALYSIS = MODEL_FAST        # 推演报告格式化：任务轻，flash 足够
+MODEL_CALIBRATE = MODEL_PRO_THINK  # 校准分析：需要深度推理
+
+# 旧模型名保留向后兼容
+MODEL_DEFAULT = MODEL_FAST
+MODEL_REASONING = MODEL_PRO_THINK
 
 # ── Tavily Domain Whitelists ──
 QUANT_DOMAINS = [
