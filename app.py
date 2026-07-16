@@ -301,7 +301,7 @@ if st.session_state.view == "predict":
             f"定性数据(伤病/阵容):\n{qual_data}"
         )
 
-        from core.config import MODEL_FAST
+        from core.config import MODEL_FAST, MODEL_PRO
         sr = _deepseek_chat(sys_prompt, user_prompt, DEEPSEEK_KEY,
                             MODEL_FAST, fallback_cfgs=[MODEL_PRO])
         if not sr:
@@ -425,7 +425,7 @@ if st.session_state.view == "predict":
             f"触发的定律: {json.dumps([t['name'] for t in triggered], ensure_ascii=False)}\n"
         )
 
-        from core.config import MODEL_FAST
+        from core.config import MODEL_FAST, MODEL_PRO
         analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY,
                                   MODEL_FAST, fallback_cfgs=[MODEL_PRO])
         if not analysis:
