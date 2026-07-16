@@ -433,10 +433,21 @@ def analyze_global_bias(calibrated_records: list[dict]) -> dict | None:
     samples = []
     for rec in calibrated_records:
         ct = rec.get("calibration", "")
-        am = re.search(r'实际[：:\s]*(\d+)\s*[-:]\s*(\d+)', ct)
-        if not am:
-            continue
-        cal_h, cal_a = int(am.group(1)), int(am.group(2))
+
+        # 新版 JSON dict
+        try:
+            cd = json.loads(ct) if isinstance(ct, str) else ct
+            if isinstance(cd, dict) and "math_score" in cd:
+                actual_parts = cd["math_score"].get("actual", "0-0").split("-")
+                cal_h, cal_a = int(actual_parts[0]), int(actual_parts[1])
+            else:
+                continue
+        except (json.JSONDecodeError, TypeError, ValueError):
+            # 旧版文本格式
+            am = re.search(r'实际[：:\s]*(\d+)\s*[-:]\s*(\d+)', str(ct))
+            if not am:
+                continue
+            cal_h, cal_a = int(am.group(1)), int(am.group(2))
 
         try:
             mj = json.loads(rec["math_json"]) \
