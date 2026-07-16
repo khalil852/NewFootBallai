@@ -1,0 +1,12 @@
+.streamlit/secrets.toml
+.streamlit/secrets*.toml
+__pycache__/
+*.pyc
+build/
+*.spec
+*.bat
+.claude/
+history_*.json
+.deep-copilot/
+streamlit
+*.sql
