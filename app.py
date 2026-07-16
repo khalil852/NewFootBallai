@@ -301,7 +301,9 @@ if st.session_state.view == "predict":
             f"定性数据(伤病/阵容):\n{qual_data}"
         )
 
-        sr = _deepseek_chat(sys_prompt, user_prompt, DEEPSEEK_KEY)
+        from core.config import MODEL_FAST
+        sr = _deepseek_chat(sys_prompt, user_prompt, DEEPSEEK_KEY,
+                            MODEL_FAST, fallback_cfgs=[MODEL_PRO])
         if not sr:
             prog.empty()
             st.warning("搜索汇总失败。")
@@ -423,9 +425,12 @@ if st.session_state.view == "predict":
             f"触发的定律: {json.dumps([t['name'] for t in triggered], ensure_ascii=False)}\n"
         )
 
-        analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY)
+        from core.config import MODEL_FAST
+        analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY,
+                                  MODEL_FAST, fallback_cfgs=[MODEL_PRO])
         if not analysis:
-            analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY)
+            analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY,
+                                      MODEL_FAST)
 
         st.session_state.analysis_report = analysis
         st.session_state.math_json = math_json

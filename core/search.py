@@ -9,36 +9,54 @@ from core.config import (
 
 
 def _deepseek_chat(system_prompt: str, user_content: str,
-                   api_key: str = "", model_cfg: dict | None = None) -> str:
+                   api_key: str = "", model_cfg: dict | None = None,
+                   fallback_cfgs: list[dict] | None = None) -> str:
+    """调用 DeepSeek，支持自动回退"""
     from core.config import MODEL_DEFAULT
-    cfg = model_cfg or MODEL_DEFAULT
-    payload = {
-        "model": cfg["model"],
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-    }
-    if "reasoning_effort" in cfg:
-        payload["reasoning_effort"] = cfg["reasoning_effort"]
-    if "max_tokens" in cfg:
-        payload["max_tokens"] = cfg["max_tokens"]
+    cfgs = [model_cfg or MODEL_DEFAULT]
+    if fallback_cfgs:
+        cfgs += fallback_cfgs
 
     key = api_key or DEEPSEEK_KEY
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-    try:
-        r = requests.post(DEEPSEEK_URL, headers=headers, json=payload, timeout=90)
-        d = r.json()
-        if "error" in d:
-            st.error(f"API 错误: {d['error']}")
-            return ""
-        if "choices" not in d or not d["choices"]:
-            st.error(f"API 格式异常: {str(d)[:200]}")
-            return ""
-        return d["choices"][0]["message"].get("content", "")
-    except Exception as e:
-        st.error(f"API 调用失败: {e}")
-        return ""
+    last_error = ""
+
+    for i, cfg in enumerate(cfgs):
+        if i > 0:
+            st.toast(f"🔄 主模型失败，回退到 {cfg.get('model','?')}...", icon="⚠️")
+
+        payload = {
+            "model": cfg["model"],
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+        }
+        if "reasoning_effort" in cfg:
+            payload["reasoning_effort"] = cfg["reasoning_effort"]
+        if "max_tokens" in cfg:
+            payload["max_tokens"] = cfg["max_tokens"]
+
+        timeout = 120 if "reasoning_effort" in cfg else 90
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        try:
+            r = requests.post(DEEPSEEK_URL, headers=headers, json=payload, timeout=timeout)
+            d = r.json()
+            if "error" in d:
+                last_error = str(d["error"])
+                continue
+            if "choices" not in d or not d["choices"]:
+                last_error = f"格式异常: {str(d)[:200]}"
+                continue
+            return d["choices"][0]["message"].get("content", "")
+        except requests.exceptions.Timeout:
+            last_error = f"超时 ({cfg['model']})"
+            continue
+        except Exception as e:
+            last_error = str(e)[:80]
+            continue
+
+    st.error(f"所有模型均失败: {last_error}")
+    return ""
 
 
 @st.cache_data(ttl=3600, show_spinner=False)

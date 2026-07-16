@@ -23,11 +23,11 @@ MODEL_PRO = {"model": "deepseek-v4-pro"}
 MODEL_PRO_THINK = {"model": "deepseek-v4-pro", "reasoning_effort": "max", "max_tokens": 4096}
 
 # 各模块默认模型分配（基于 16 场 benchmark 结果）
-MODEL_SEARCH = MODEL_FAST          # flash: 13/16成功, 48.8s — 最稳定
+MODEL_SEARCH = MODEL_FAST          # flash: 13/16, 48.8s — 最稳定
 MODEL_ANALYSIS = MODEL_FAST        # flash: 报告格式化不需要推理
-MODEL_CALIBRATE = MODEL_PRO        # pro 非思考: 11/16 成功 — 比 thinking 稳定
-# 备选: 如果 pro 失败率高，回退 flash
-MODEL_CALIBRATE_FALLBACK = MODEL_FAST
+MODEL_CALIBRATE = MODEL_PRO_THINK  # pro+think: 80%胜负命中率
+# 回退链：pro+think → pro → flash
+CALIBRATE_FALLBACKS = [MODEL_PRO, MODEL_FAST]
 
 # 旧模型名保留向后兼容
 MODEL_DEFAULT = MODEL_FAST

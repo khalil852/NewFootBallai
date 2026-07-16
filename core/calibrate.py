@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import streamlit as st
 from core.config import (
     DEEPSEEK_KEY, DEEPSEEK_URL, SUPABASE_URL, SUPABASE_KEY,
-    MODEL_FAST, MODEL_CALIBRATE, PROMPT_CALIBRATE,
+    MODEL_FAST, MODEL_CALIBRATE, CALIBRATE_FALLBACKS, PROMPT_CALIBRATE,
 )
 from core.search import _deepseek_chat, search_post_match, extract_odds
 from core.models import MatchPrediction, CalibrationResult
@@ -320,7 +320,8 @@ def calibrate_record(record: dict, laws: list[dict],
         f"赛前报告:\n{analysis_report[:3000]}"
     )
 
-    cr = _deepseek_chat(PROMPT_CALIBRATE, calibrate_prompt, key, MODEL_CALIBRATE)
+    cr = _deepseek_chat(PROMPT_CALIBRATE, calibrate_prompt, key,
+                        MODEL_CALIBRATE, fallback_cfgs=CALIBRATE_FALLBACKS)
 
     # ── 提取偏差分析文本 ──
     bias_analysis = re.sub(r'```json[\s\S]*?```', '', cr).strip()
