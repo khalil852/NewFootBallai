@@ -59,7 +59,6 @@ def _deepseek_chat(system_prompt: str, user_content: str,
     return ""
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def _tavily_search(query: str, include_domains: list[str] | None = None,
                    max_results: int = 8) -> str:
     if not TAVILY_KEY:
