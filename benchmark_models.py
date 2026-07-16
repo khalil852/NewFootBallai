@@ -212,24 +212,27 @@ for combo_name, model_cfg in COMBOS:
 
     # ── 汇总本组合 ──
     valid = [r for r in combo_results if r and "error" not in r]
+    n = len(valid)
+    avg_acc = avg_time = 0.0
+    score_hit = result_hit = 0
     if valid:
-        avg_acc = sum(r["accuracy"] for r in valid) / len(valid)
-        avg_time = sum(r["time_s"] for r in valid) / len(valid)
+        avg_acc = sum(r["accuracy"] for r in valid) / n
+        avg_time = sum(r["time_s"] for r in valid) / n
         score_hit = sum(1 for r in valid if r["score_match"])
         result_hit = sum(1 for r in valid if r["result_match"])
-        n = len(valid)
 
     RESULTS.append({
         "combo": combo_name,
         "model": model_cfg.get("model", "?"),
         "think": "max" if "reasoning_effort" in model_cfg else "off",
         "total": len(combo_results),
-        "success": len(valid) if valid else 0,
-        "avg_accuracy": round(avg_acc, 1) if valid else 0,
-        "avg_time_s": round(avg_time, 1) if valid else 0,
-        "score_hit_rate": f"{score_hit}/{n} = {round(score_hit/n*100)}%" if valid else "N/A",
-        "result_hit_rate": f"{result_hit}/{n} = {round(result_hit/n*100)}%" if valid else "N/A",
+        "success": n,
+        "avg_accuracy": round(avg_acc, 1),
+        "avg_time_s": round(avg_time, 1),
+        "score_hit_rate": f"{score_hit}/{n} = {round(score_hit/n*100)}%" if n else "N/A",
+        "result_hit_rate": f"{result_hit}/{n} = {round(result_hit/n*100)}%" if n else "N/A",
     })
+    if valid:
         print(f"\n  汇总: 准确率 {avg_acc:.1f} | 速度 {avg_time:.1f}s | "
               f"比分命中 {score_hit}/{n} | 胜负命中 {result_hit}/{n}")
 
