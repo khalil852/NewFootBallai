@@ -1,4 +1,4 @@
-"""模型 Benchmark: 50 场推演+校准，对比 4 种模型组合的准确率/速度/质量"""
+"""模型 Benchmark: 16 场推演+校准，对比 4 种模型组合的准确率/速度/质量"""
 import json, time, sys
 sys.path.insert(0, ".")
 
@@ -19,7 +19,7 @@ COMBOS = [
     ("pro+think",      MODEL_PRO_THINK),   # pro 思考模式
 ]
 
-# ── 50 场真实比赛（已结束、有确定比分） ──
+# ── 16 场真实比赛（已结束、有确定比分） ──
 MATCHES = [
     ("阿根廷 vs 英格兰", "2-1"),
     ("西班牙 vs 法国", "2-0"),
@@ -37,51 +37,16 @@ MATCHES = [
     ("德国 vs 葡萄牙", "2-1"),
     ("乌拉圭 vs 阿根廷", "0-1"),
     ("英格兰 vs 德国", "2-0"),
-    ("比利时 vs 法国", "0-1"),
-    ("克罗地亚 vs 西班牙", "1-3"),
-    ("塞内加尔 vs 荷兰", "0-2"),
-    ("墨西哥 vs 阿根廷", "1-2"),
-    ("日本 vs 德国", "2-1"),
-    ("韩国 vs 葡萄牙", "2-1"),
-    ("澳大利亚 vs 法国", "1-4"),
-    ("加拿大 vs 比利时", "0-1"),
-    ("摩洛哥 vs 西班牙", "0-0"),
-    ("加纳 vs 乌拉圭", "0-2"),
-    ("伊朗 vs 英格兰", "0-6"),
-    ("沙特 vs 阿根廷", "1-2"),
-    ("突尼斯 vs 法国", "1-0"),
-    ("丹麦 vs 巴西", "1-2"),
-    ("瑞士 vs 葡萄牙", "1-6"),
-    ("波兰 vs 法国", "1-3"),
-    ("哥伦比亚 vs 巴西", "1-2"),
-    ("厄瓜多尔 vs 英格兰", "0-3"),
-    ("奥地利 vs 德国", "1-2"),
-    ("土耳其 vs 意大利", "0-2"),
-    ("捷克 vs 葡萄牙", "0-4"),
-    ("匈牙利 vs 法国", "0-3"),
-    ("苏格兰 vs 英格兰", "1-2"),
-    ("瑞典 vs 德国", "1-2"),
-    ("挪威 vs 西班牙", "1-3"),
-    ("智利 vs 巴西", "0-4"),
-    ("巴拉圭 vs 阿根廷", "0-2"),
-    ("秘鲁 vs 乌拉圭", "0-1"),
-    ("日本 vs 西班牙", "1-2"),
-    ("韩国 vs 巴西", "1-4"),
-    ("澳大利亚 vs 阿根廷", "1-2"),
-    ("塞内加尔 vs 英格兰", "0-3"),
-    ("摩洛哥 vs 法国", "0-2"),
-    ("克罗地亚 vs 巴西", "1-1"),
 ]
 
-RUNS_PER_COMBO = 1  # 每种组合每场跑 1 次（4×50=200 次推演）
+RUNS_PER_COMBO = 1  # 4组合 × 16场 = 64次推演
 
 RESULTS = []
 LAWS = []  # 空的，只用教练库+内置修正
 
 print("=" * 65)
-print("  Model Benchmark — 50 场推演校准")
-print(f"  4 组合 × 50 场 = 200 次推演（每次 search+analysis）")
-print(f"  预计耗时: ~30分钟，API 费用: 需关注")
+print("  Model Benchmark — 16 场推演校准")
+print(f"  4 组合 × 16 场 = 64 次推演（每次 search+analysis）")
 print("=" * 65)
 
 for combo_name, model_cfg in COMBOS:
@@ -93,7 +58,7 @@ for combo_name, model_cfg in COMBOS:
     combo_results = []
 
     for i, (match, actual_score) in enumerate(MATCHES):
-        print(f"  [{combo_name}] {i+1:2d}/50  {match} ...", end=" ", flush=True)
+        print(f"  [{combo_name}] {i+1:2d}/16  {match} ...", end=" ", flush=True)
 
         t_start = time.time()
         search_ok = True
