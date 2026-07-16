@@ -1,9 +1,8 @@
-"""数据库操作：SDK + REST API 双通道"""
+"""数据库操作：REST API"""
 import json, requests
 from datetime import datetime
 import streamlit as st
 from core.config import SUPABASE_URL, SUPABASE_KEY
-from core.supabase_client import supabase
 
 _REST_H = {
     "apikey": SUPABASE_KEY,
