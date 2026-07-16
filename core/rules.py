@@ -3,7 +3,7 @@ import re
 import streamlit as st
 from core.config import TEAM_EN
 from core.models import LambdaModifiers
-from core.supabase_client import supabase
+from core.supabase_client import get_supabase
 
 
 def _parse_teams(query: str) -> tuple[str | None, str | None]:
@@ -26,7 +26,7 @@ def _lookup_coach(team_cn: str) -> dict:
     """按中文队名查教练表"""
     team_en = TEAM_EN.get(team_cn, team_cn)
     try:
-        d = supabase.table("coaches").select("*").eq("team", team_en).execute()
+        d = get_supabase().table("coaches").select("*").eq("team", team_en).execute()
         return d.data[0] if d.data else {}
     except Exception:
         return {}

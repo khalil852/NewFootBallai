@@ -4,7 +4,7 @@ from datetime import datetime
 import streamlit as st
 from core.auth import login_user, register_user, restore_login, logout
 from core.config import DEEPSEEK_KEY, SUPABASE_KEY, SUPABASE_URL
-from core.supabase_client import supabase
+from core.supabase_client import get_supabase
 from core.models import LambdaModifiers, MatchPrediction
 from core.engine import predict_match, predict_branched, odds_to_lambda
 from core.rules import run_rules, detect_knockout

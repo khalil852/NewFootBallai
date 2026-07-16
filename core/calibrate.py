@@ -394,8 +394,8 @@ def calibrate_record(record: dict, laws: list[dict],
 
     # ── 保存校准结果（序列化整个 dict） ──
     try:
-        from core.supabase_client import supabase
-        supabase.table("history").update(
+        from core.supabase_client import get_supabase
+        get_supabase().table("history").update(
             {"calibration": json.dumps(cal_result, ensure_ascii=False)}
         ).eq("id", record["id"]).execute()
     except Exception:

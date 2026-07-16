@@ -2,7 +2,7 @@
 import requests
 import streamlit as st
 from core.config import SUPABASE_URL, SUPABASE_KEY
-from core.supabase_client import supabase
+from core.supabase_client import get_supabase
 
 
 _AUTH_H = {
@@ -125,7 +125,7 @@ def _update_auth() -> None:
     at = st.session_state.get("access_token")
     if at:
         try:
-            supabase.auth.set_session(at, st.session_state.get("refresh_token", ""))
+            get_supabase().auth.set_session(at, st.session_state.get("refresh_token", ""))
         except Exception:
             pass
 
@@ -159,7 +159,7 @@ def restore_login() -> bool:
 
 def logout() -> None:
     try:
-        supabase.auth.sign_out()
+        get_supabase().auth.sign_out()
     except Exception:
         pass
     for k in ("logged_in", "username", "email", "access_token",

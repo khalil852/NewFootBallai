@@ -3,7 +3,7 @@ import requests
 from datetime import date
 import streamlit as st
 from core.config import SUPABASE_URL, SUPABASE_KEY
-from core.supabase_client import supabase
+from core.supabase_client import get_supabase
 
 
 _H = {
@@ -22,7 +22,7 @@ TIERS = {
 
 def _ensure_quota(username: str) -> dict:
     try:
-        data = supabase.table("user_quotas").select("*")\
+        data = get_supabase().table("user_quotas").select("*")\
             .eq("username", username).execute()
         if data.data:
             return data.data[0]
@@ -35,7 +35,7 @@ def _ensure_quota(username: str) -> dict:
             "last_reset_date": str(date.today()),
             "bonus_quota": 0,
         }
-        supabase.table("user_quotas").insert(init).execute()
+        get_supabase().table("user_quotas").insert(init).execute()
         return init
     except Exception:
         return {"tier": "free", "daily_limit": 1, "used_today": 0,
@@ -48,7 +48,7 @@ def _check_reset(data: dict) -> dict:
         data["used_today"] = 0
         data["last_reset_date"] = today
         try:
-            supabase.table("user_quotas").update(
+            get_supabase().table("user_quotas").update(
                 {"used_today": 0, "last_reset_date": today}
             ).eq("username", data["username"]).execute()
         except Exception:
@@ -80,7 +80,7 @@ def deduct_quota(username: str) -> None:
     d = _check_reset(_ensure_quota(username))
     new_used = d.get("used_today", 0) + 1
     try:
-        supabase.table("user_quotas").update({"used_today": new_used})\
+        get_supabase().table("user_quotas").update({"used_today": new_used})\
             .eq("username", username).execute()
     except Exception:
         pass
@@ -90,7 +90,7 @@ def add_bonus(username: str, amount: int = 1) -> None:
     d = _ensure_quota(username)
     new_bonus = d.get("bonus_quota", 0) + amount
     try:
-        supabase.table("user_quotas").update({"bonus_quota": new_bonus})\
+        get_supabase().table("user_quotas").update({"bonus_quota": new_bonus})\
             .eq("username", username).execute()
     except Exception:
         pass
@@ -103,7 +103,7 @@ def init_quota(username: str) -> None:
 def upgrade_tier(username: str, tier: str = "paid") -> bool:
     dl = TIERS.get(tier, TIERS["free"])["daily_limit"]
     try:
-        supabase.table("user_quotas").update(
+        get_supabase().table("user_quotas").update(
             {"tier": tier, "daily_limit": dl, "used_today": 0}
         ).eq("username", username).execute()
         return True
