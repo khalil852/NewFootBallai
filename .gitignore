@@ -8,7 +8,9 @@ build/
 .claude/
 history_*.json
 seed_laws.py
+benchmark*.py
 benchmark*.json
+calibration_experiment.json
 .deep-copilot/
 streamlit
 *.sql
