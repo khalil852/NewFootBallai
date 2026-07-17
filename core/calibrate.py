@@ -10,6 +10,7 @@ from core.config import (
 from core.search import _deepseek_chat, search_post_match, extract_odds
 from core.models import MatchPrediction, CalibrationResult
 from core.database import update_law_stats
+from core.rules import parse_teams
 
 
 def _now_beijing() -> datetime:
@@ -87,23 +88,32 @@ def _extract_actual_score(post_report: str) -> tuple[int | None, int | None,
     except Exception:
         pass
 
-    # 正则回退
+    # 正则回退 — 三级力度
     if ah is None or aa is None:
-        # 优先搜 "最终比分" 上下文
-        ctx_patterns = [
-            r'(?:最终比分|Full[-\s]?time|FT|Result)[:\s]*(\d+)\s*[-:]\s*(\d+)',
-            r'(\d+)\s*[-:]\s*(\d+)(?:\s*\(.*?(?:FT|Full|最终)\))',
-        ]
-        for pat in ctx_patterns:
-            m = re.search(pat, post_report, re.IGNORECASE)
-            if m:
-                ah, aa = int(m.group(1)), int(m.group(2))
-                break
+        # 第1级: 紧跟在比分关键词后 ≤20 字符
+        m = re.search(
+            r'(?:最终比分|全场比赛结束|Full[-\s]?time|FT|Result|Final score)[:\s]*'
+            r'(\d+)\s*[-:]\s*(\d+)',
+            post_report, re.IGNORECASE)
+        if m:
+            ah, aa = int(m.group(1)), int(m.group(2))
 
-        if ah is None:
-            scores = re.findall(r'(\d+)\s*[-:]\s*(\d+)', post_report[:2000])
-            if scores:
-                ah, aa = int(scores[0][0]), int(scores[0][1])
+    if ah is None or aa is None:
+        # 第2级: 比分关键词附近 (可跨行)
+        m = re.search(
+            r'(?:最终比分|Full.time|FT|final).{0,60}?'
+            r'(\d+)\s*[-:]\s*(\d+)',
+            post_report, re.IGNORECASE | re.DOTALL)
+        if m:
+            ah, aa = int(m.group(1)), int(m.group(2))
+
+    if ah is None or aa is None:
+        # 第3级: 全文扫，取第一个合理比分 (≤10球)，排除年份
+        for m in re.finditer(r'(?<!\d)(\d)\s*[-:]\s*(\d)(?!\d)', post_report[:3000]):
+            a, b = int(m.group(1)), int(m.group(2))
+            if a <= 10 and b <= 10:
+                ah, aa = a, b
+                break
 
     return ah, aa, xg_h, xg_a
 
@@ -280,7 +290,7 @@ def calibrate_record(record: dict, laws: list[dict],
         if sm:
             stats_data = json.loads(sm.group()).get("stats", {})
             if stats_data:
-                teams = (_parse_teams(match_name)
+                teams = (parse_teams(match_name)
                          or (record.get("home","主队"), record.get("away","客队")))
                 home_name = teams[0] or "主队"
                 away_name = teams[1] or "客队"

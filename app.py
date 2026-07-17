@@ -314,7 +314,7 @@ def _do_prediction(match: str, prog=None) -> str:
         lam_h0, lam_a0 = odds_to_lambda(p_h, p_d, p_a)
         odds_tuple = (oh, od, oa)
 
-    from core.rules import _parse_teams
+    from core.rules import parse_teams as _parse_teams
     parsed = _parse_teams(match); t1 = parsed[0] or "" if parsed else ""; t2 = parsed[1] or "" if parsed else ""
 
     if has_branches:
