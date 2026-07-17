@@ -338,9 +338,32 @@ def calibrate_record(record: dict, laws: list[dict],
             for item in items:
                 if not isinstance(item, dict):
                     continue
+
+                has_id = bool(item.get("id"))
+
+                # 修改已有定律
+                if has_id and item.get("trigger_config") is not None:
+                    from core.database import save_law
+                    save_law({
+                        "id": item["id"],
+                        "username": st.session_state.username,
+                        "trigger_config": item.get("trigger_config", {}),
+                        "modifier_map": item.get("modifier_map", {}),
+                        "name": item.get("name", ""),
+                    })
+                    modified_laws.append(item.get("name", item["id"]))
+                    auto_count += 1
+                    continue
+
+                # 查重 — 同名定律已存在则跳过
+                existing_names = {l.get("name","") for l in laws}
+                if item.get("name","") in existing_names:
+                    st.toast(f"跳过定律: '{item['name']}' 已存在", icon="⚠️")
+                    continue
+
+                # 新增定律 — 必须通过校验
                 if _validate_trigger(item):
-                    lid = item.get("id") or \
-                        f"auto_{datetime.now().strftime('%Y%m%d%H%M%S')}_{auto_count}"
+                    lid = f"auto_{datetime.now().strftime('%Y%m%d%H%M%S')}_{auto_count}"
                     item["id"] = lid
                     item["username"] = st.session_state.username
                     item.setdefault("status", "active")
@@ -348,16 +371,6 @@ def calibrate_record(record: dict, laws: list[dict],
                     from core.database import save_law
                     save_law(item)
                     new_laws.append(item.get("name", lid))
-                    auto_count += 1
-
-                if "id" in item and "trigger_config" in item and not _validate_trigger(item):
-                    from core.database import save_law
-                    save_law({"id": item["id"],
-                              "username": st.session_state.username,
-                              "trigger_config": item.get("trigger_config", {}),
-                              "modifier_map": item.get("modifier_map", {}),
-                              "name": item.get("name", "")})
-                    modified_laws.append(item.get("name", item.get("id", "")))
                     auto_count += 1
 
         degrade_block = re.search(
@@ -409,19 +422,56 @@ FORBIDDEN_WORDS = [
     "实际", "赛后", "射门", "控球", "xG", "xG",
     "上半场", "下半场", "进球", "失球", "比赛中",
     "比分", "结果", "最终", "绝杀", "逆转",
+    "爆冷", "输球", "赢了", "输了", "取胜", "获胜",
 ]
 
 
 def _validate_trigger(law: dict) -> bool:
-    """校验新定律的触发条件不含赛后词汇"""
+    """校验新定律触发条件的合法性"""
     config_str = json.dumps(law.get("trigger_config", {}), ensure_ascii=False)
     trigger_mode = law.get("trigger_mode", "")
+
+    # 1. trigger_mode 必须合法
     if trigger_mode not in ("keyword", "team", "coach", "match_type", "always"):
         return False
+
+    # 2. 不含赛后词汇
     for w in FORBIDDEN_WORDS:
         if w in config_str:
+            st.toast(f"跳过定律: 含赛后词汇 '{w}'", icon="⚠️")
             return False
-    return len(config_str) > 4
+
+    # 3. config 不能是空对象（unless always mode）
+    if trigger_mode != "always" and len(config_str) < 6:
+        return False
+
+    # 4. modifier_map 值必须在 0.70-1.30 范围内
+    mm = law.get("modifier_map", {})
+    for k, v in mm.items():
+        try:
+            fv = float(v)
+            if fv < 0.70 or fv > 1.30:
+                st.toast(f"跳过定律: modifier {k}={fv} 超出范围", icon="⚠️")
+                return False
+        except (ValueError, TypeError):
+            return False
+
+    # 5. keyword 模式的 keywords 不能全是赛后词汇
+    if trigger_mode == "keyword":
+        keywords = law.get("trigger_config", {}).get("keywords", [])
+        if isinstance(keywords, list):
+            all_post = all(
+                any(w in kw.lower() for w in FORBIDDEN_WORDS[:8])
+                for kw in keywords
+            )
+            if all_post:
+                st.toast("跳过定律: 所有关键词都是赛后词汇", icon="⚠️")
+                return False
+            # 至少一个关键词长度 > 1
+            if not any(len(kw) > 1 for kw in keywords):
+                return False
+
+    return True
 
 
 def analyze_global_bias(calibrated_records: list[dict]) -> dict | None:
