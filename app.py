@@ -614,78 +614,57 @@ if st.session_state.view == "history":
     calibrated = [r for r in history if r.get("calibration")]
 
     # ── Toolbar ──
-    st.markdown(
-        f"共 **{len(history)}** 条 · "
-        f"⚪ 未校准 **{len(uncalibrated)}** · "
-        f"🟢 已校准 **{len(calibrated)}**"
-    )
+    match_options = {r.get("match",""): i for i, r in enumerate(history)}
+    match_list = list(match_options.keys())
 
-    tb1, tb2, tb3, tb4 = st.columns(4)
-    with tb1:
-        if st.button("☑ 全选未校准", use_container_width=True):
-            st.session_state._sel_cal = [r.get("match", "") for r in uncalibrated]
-            st.rerun()
-    with tb2:
-        if st.button("☐ 取消全选", use_container_width=True):
-            st.session_state._sel_cal = []
-            st.rerun()
-    with tb3:
-        n_sel = len(st.session_state._sel_cal)
-        if st.button(f"⚡ 校准选中 ({n_sel})" if n_sel else "⚡ 校准选中",
-                     use_container_width=True, type="primary",
-                     disabled=n_sel == 0):
-            bar = st.progress(0, text="批量校准中...")
-            ok_count = skip_count = 0
-            laws_now = load_laws(st.session_state.username)
-            all_recs = history
-            recent_cal = [r for r in all_recs if r.get("calibration")]
-            bias_rpt = analyze_global_bias(all_recs)
+    uncal_list = [m for m in match_list if not history[match_options[m]].get("calibration")]
 
-            sel_matches = list(st.session_state._sel_cal)
-            for i, mk in enumerate(sel_matches):
-                bar.progress((i + 1) / len(sel_matches), text=f"校准 {mk[:25]}...")
-                rec = next((r for r in all_recs if r.get("match") == mk
-                           and not r.get("calibration")), None)
-                if rec:
-                    success, _, _ = calibrate_record(
-                        rec, laws_now, recent_cal, bias_rpt)
-                    if success:
-                        ok_count += 1
-                        recent_cal.append(rec)
-                    else:
-                        skip_count += 1
-                else:
-                    skip_count += 1
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"共 **{len(history)}** 条 · ⚪未校准 **{len(uncal_list)}** · 🟢已校准 **{len(history)-len(uncal_list)}**")
+    with c2:
+        all_uncal_btn, cal_sel_btn = st.columns(2)
+        with all_uncal_btn:
+            if st.button("⚡ 一键校准全部未校准", use_container_width=True, type="primary",
+                         disabled=len(uncal_list)==0):
+                bar = st.progress(0, text="批量校准中...")
+                laws_now = load_laws(st.session_state.username)
+                all_recs = history
+                recent_cal = [r for r in all_recs if r.get("calibration")]
+                bias_rpt = analyze_global_bias(all_recs)
+                ok, sk = 0, 0
+                for i, mk in enumerate(uncal_list):
+                    bar.progress((i+1)/len(uncal_list), text=f"校准 {mk[:25]}...")
+                    rec = history[match_options[mk]]
+                    s, _, _ = calibrate_record(rec, laws_now, recent_cal, bias_rpt)
+                    if s: ok += 1; recent_cal.append(rec)
+                    else: sk += 1
+                bar.empty()
+                st.success(f"完成: 成功 {ok}，跳过 {sk}")
+                st.rerun()
 
-            bar.empty()
-            st.success(f"完成: 成功 {ok_count}，跳过 {skip_count}")
-            st.session_state._sel_cal = []
-            st.rerun()
-    with tb4:
-        if st.button("⚡ 全部未校准", use_container_width=True):
-            bar = st.progress(0, text="批量校准中...")
-            ok_count = skip_count = 0
-            laws_now = load_laws(st.session_state.username)
-            all_recs = history
-            recent_cal = [r for r in all_recs if r.get("calibration")]
-            bias_rpt = analyze_global_bias(all_recs)
-
-            uncal_list = [r for r in all_recs if not r.get("calibration")]
-            for i, rec in enumerate(uncal_list):
-                bar.progress((i + 1) / len(uncal_list),
-                             text=f"校准 {rec.get('match','')[:25]}...")
-                success, _, _ = calibrate_record(
-                    rec, laws_now, recent_cal, bias_rpt)
-                if success:
-                    ok_count += 1
-                    recent_cal.append(rec)
-                else:
-                    skip_count += 1
-
-            bar.empty()
-            st.success(f"完成: 成功 {ok_count}，跳过 {skip_count}")
-            st.session_state._sel_cal = []
-            st.rerun()
+        with cal_sel_btn:
+            selected = st.multiselect(
+                "校准选中", uncal_list,
+                placeholder=f"选比赛 ({len(uncal_list)}条未校准)",
+                label_visibility="collapsed", key="cal_select"
+            )
+            if selected and st.button("⚡ 校准以上", use_container_width=True):
+                bar = st.progress(0, text="批量校准中...")
+                laws_now = load_laws(st.session_state.username)
+                all_recs = history
+                recent_cal = [r for r in all_recs if r.get("calibration")]
+                bias_rpt = analyze_global_bias(all_recs)
+                ok, sk = 0, 0
+                for i, mk in enumerate(selected):
+                    bar.progress((i+1)/len(selected), text=f"校准 {mk[:25]}...")
+                    rec = history[match_options[mk]]
+                    s, _, _ = calibrate_record(rec, laws_now, recent_cal, bias_rpt)
+                    if s: ok += 1; recent_cal.append(rec)
+                    else: sk += 1
+                bar.empty()
+                st.success(f"完成: 成功 {ok}，跳过 {sk}")
+                st.rerun()
 
     st.divider()
 
@@ -719,21 +698,6 @@ if st.session_state.view == "history":
                  f"{rec.get('timestamp','')[:16]} | {cal_badge}")
 
         with st.expander(title, expanded=False):
-            # Checkbox for batch
-            mk_key = rec.get("match", "")
-            if not is_calibrated:
-                sel = st.checkbox(
-                    "勾选批量校准", key=f"sel_{rec.get('id',i)}",
-                    value=mk_key in st.session_state._sel_cal,
-                )
-                sel_list = list(st.session_state._sel_cal)
-                if sel and mk_key not in sel_list:
-                    sel_list.append(mk_key)
-                    st.session_state._sel_cal = sel_list
-                elif not sel and mk_key in sel_list:
-                    sel_list.remove(mk_key)
-                    st.session_state._sel_cal = sel_list
-
             # Score Card (rendered from math_json)
             hf = flag_img(home_team)
             af = flag_img(away_team)
