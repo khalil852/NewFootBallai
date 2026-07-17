@@ -344,6 +344,18 @@ def _do_prediction(match: str, prog=None) -> str:
             mt_str = mt
     saved = save_record(match=match, search_report=search_report, analysis_report=analysis, math_json=math_json, triggered_laws=triggered, is_knockout=is_ko, match_time=mt_str)
     deduct_quota(st.session_state.username)
+
+    # 写 session_state（用于单场推演展示）
+    st.session_state.search_report = search_report
+    st.session_state.analysis_report = analysis
+    st.session_state.math_json = math_json
+    st.session_state.math_prediction = pred
+    st.session_state.coach_info = coach_info
+    st.session_state.triggered_details = triggered
+    st.session_state.current_match = match
+    st.session_state.current_match_time = mt_str
+    st.session_state.is_knockout = is_ko
+
     return "ok" if saved else "fail"
 
 
