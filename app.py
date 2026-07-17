@@ -260,201 +260,170 @@ with c_laws:
 st.divider()
 
 
+def _do_prediction(match: str, prog=None) -> str:
+    """执行一条推演，返回 'ok' / 'skip' / 'fail'"""
+    ok, msg = can_predict(st.session_state.username)
+    if not ok:
+        st.toast(f"❌ {match}: {msg}", icon="❌")
+        return "skip"
+
+    laws = load_laws(st.session_state.username)
+
+    if prog: prog.progress(0, text=f"⏳ {match} 搜索中...")
+    try:
+        quant_data = search_quantitative(match)
+    except Exception:
+        quant_data = ""
+    try:
+        qual_data = search_qualitative(match)
+    except Exception:
+        qual_data = ""
+
+    combined = quant_data + "\n" + qual_data
+    if not combined.strip():
+        st.toast(f"⚠️ {match}: 无搜索结果", icon="⚠️")
+        return "skip"
+
+    from core.config import MODEL_FAST, MODEL_PRO
+    sr = _deepseek_chat(PROMPT_SEARCH,
+        f"为 {match} 搜集赛前信息并输出结构化数据。\n定量数据(赔率等):\n{quant_data}\n\n定性数据(伤病/阵容):\n{qual_data}",
+        DEEPSEEK_KEY, MODEL_FAST, fallback_cfgs=[MODEL_PRO])
+    if not sr:
+        st.toast(f"⚠️ {match}: 搜索汇总失败", icon="⚠️")
+        return "skip"
+
+    search_report = clean_report(sr)
+    structured = extract_structured(sr)
+    is_ko = detect_knockout(search_report, structured)
+
+    if prog: prog.progress(30, text=f"🔍 {match} 匹配定律...")
+    rules_result = run_rules(search_report, structured, match, laws)
+    modifiers = rules_result["modifiers"]
+    triggered = rules_result["triggered"]
+    coach_info = rules_result["coach_info"]
+    has_branches = rules_result["has_uncertainty"]
+    uncertainty = rules_result["uncertainty"]
+
+    if prog: prog.progress(50, text=f"🧮 {match} 计算中...")
+    odds_data = extract_odds(quant_data)
+    lam_h0, lam_a0 = 1.5, 1.2
+    odds_tuple = None
+    if odds_data.get("odds_h") and odds_data.get("odds_d") and odds_data.get("odds_a"):
+        oh, od, oa = odds_data["odds_h"], odds_data["odds_d"], odds_data["odds_a"]
+        p_h = (1/oh)/(1/oh+1/od+1/oa); p_a = (1/oa)/(1/oh+1/od+1/oa); p_d = (1/od)/(1/oh+1/od+1/oa)
+        lam_h0, lam_a0 = odds_to_lambda(p_h, p_d, p_a)
+        odds_tuple = (oh, od, oa)
+
+    from core.rules import _parse_teams
+    parsed = _parse_teams(match); t1 = parsed[0] or "" if parsed else ""; t2 = parsed[1] or "" if parsed else ""
+
+    if has_branches:
+        branches = []
+        for u in uncertainty:
+            pnl = float(u.get("effect", 0.85))
+            ma = LambdaModifiers(attack=modifiers.attack, defense=modifiers.defense, tactical=modifiers.tactical, coach_intent=modifiers.coach_intent, scenario=modifiers.scenario, home_adv=modifiers.home_adv, confidence=modifiers.confidence)
+            mb = LambdaModifiers(attack=modifiers.attack*pnl, defense=modifiers.defense, tactical=modifiers.tactical, coach_intent=modifiers.coach_intent, scenario=modifiers.scenario, home_adv=modifiers.home_adv, confidence=modifiers.confidence)
+            branches.append({"label":u.get("scenario_a","首发"),"weight":u.get("weight_a",0.5),"modifiers":ma})
+            branches.append({"label":u.get("scenario_b","替补"),"weight":u.get("weight_b",0.5),"modifiers":mb})
+        pred = predict_branched(t1, t2, lam_h0, lam_a0, branches).blended
+    else:
+        pred = predict_match(t1, t2, lam_h0, lam_a0, modifiers, odds_tuple)
+
+    if prog: prog.progress(75, text=f"📝 {match} 生成报告...")
+    math_json = json.dumps({"淘汰赛":is_ko, **pred.to_json(), "定律修正因子":{"attack":round(modifiers.attack,3),"defense":round(modifiers.defense,3),"tactical":round(modifiers.tactical,3),"coach_intent":round(modifiers.coach_intent,3),"scenario":round(modifiers.scenario,3),"home_adv":round(modifiers.home_adv,3)},"教练信息":coach_info,"触发定律":triggered,"赔率推导λ":f"{lam_h0:.2f}/{lam_a0:.2f}"}, ensure_ascii=False)
+
+    report_prompt = f"赛前数据:\n{search_report[:6000]}\n\n数学计算结果:\n{json.dumps(pred.to_json(),ensure_ascii=False)}\n修正因子:{json.dumps({k:round(v,3) for k,v in modifiers.__dict__.items()},ensure_ascii=False)}\n触发的定律:{json.dumps([t['name'] for t in triggered],ensure_ascii=False)}\n"
+    analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY, MODEL_FAST, fallback_cfgs=[MODEL_PRO])
+    if not analysis:
+        analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY, MODEL_FAST)
+
+    mt_str = ""
+    if structured and structured.get("match_time"):
+        mt = structured["match_time"]
+        if "YYYY" not in mt and "?" not in mt:
+            mt_str = mt
+    saved = save_record(match=match, search_report=search_report, analysis_report=analysis, math_json=math_json, triggered_laws=triggered, is_knockout=is_ko, match_time=mt_str)
+    deduct_quota(st.session_state.username)
+    return "ok" if saved else "fail"
+
+
 # ===================================================================
 #  PREDICT TAB
 # ===================================================================
 if st.session_state.view == "predict":
+    # ── Single Predict ──
     match = st.text_input("比赛对阵", placeholder="法国 vs 塞内加尔", key="match_input")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        if st.button("⚡ 一键推演", use_container_width=True, type="primary", key="do_predict"):
+            if not match:
+                st.warning("请先输入比赛名称")
+            else:
+                result = _do_prediction(match)
+                if result == "ok":
+                    st.session_state.fresh_result = True
+                    st.session_state.current_match = match
+                    st.rerun()
+    with c2:
+        add_queue = st.button("📋 加入队列", use_container_width=True, key="add_queue")
 
-    if st.button("⚡ 一键推演", use_container_width=True, type="primary", key="do_predict"):
-        if not match:
-            st.warning("请先输入比赛名称")
-            st.stop()
+    # ── Batch Queue ──
+    if "_predict_queue" not in st.session_state:
+        st.session_state._predict_queue = []
 
-        ok, msg = can_predict(st.session_state.username)
-        if not ok:
-            st.error(f"❌ {msg}")
-            st.stop()
-
-        # ── Step 1: Search ──
-        prog = st.progress(0, text="⏳ 搜索赛前数据...")
-        try:
-            quant_data = search_quantitative(match)
-        except Exception:
-            quant_data = ""
-        try:
-            qual_data = search_qualitative(match)
-        except Exception:
-            qual_data = ""
-
-        combined = quant_data + "\n" + qual_data
-        if not combined.strip():
-            prog.empty()
-            st.warning("搜索未返回结果。")
-            st.stop()
-
-        # DeepSeek 汇总 + 结构化提取
-        sys_prompt = PROMPT_SEARCH
-        user_prompt = (
-            f"为 {match} 搜集赛前信息并输出结构化数据。\n"
-            f"定量数据(赔率等):\n{quant_data}\n\n"
-            f"定性数据(伤病/阵容):\n{qual_data}"
-        )
-
-        from core.config import MODEL_FAST, MODEL_PRO
-        sr = _deepseek_chat(sys_prompt, user_prompt, DEEPSEEK_KEY,
-                            MODEL_FAST, fallback_cfgs=[MODEL_PRO])
-        if not sr:
-            prog.empty()
-            st.warning("搜索汇总失败。")
-            st.stop()
-
-        search_report = clean_report(sr)
-        structured = extract_structured(sr)
-        st.session_state.search_report = search_report
-        st.session_state.current_match = match
-
-        # 从结构化 JSON 取开赛时间
-        if structured and structured.get("match_time"):
-            mt = structured["match_time"]
-            if "YYYY" not in mt and "?" not in mt:
-                st.session_state.current_match_time = mt
-
-        is_ko = detect_knockout(search_report, structured)
-        st.session_state.is_knockout = is_ko
-
-        # ── Step 2: Rules ──
-        prog.progress(30, text="🔍 匹配定律树...")
-        rules_result = run_rules(search_report, structured, match, laws)
-        modifiers = rules_result["modifiers"]
-        triggered = rules_result["triggered"]
-        coach_info = rules_result["coach_info"]
-        has_branches = rules_result["has_uncertainty"]
-        uncertainty = rules_result["uncertainty"]
-        st.session_state.coach_info = coach_info
-        st.session_state.triggered_details = triggered
-
-        # ── Step 3: Engine ──
-        prog.progress(50, text="🧮 运行数学引擎...")
-
-        # 定量管道: 赔率 → λ
-        odds_data = extract_odds(quant_data)
-        lam_h0, lam_a0 = 1.5, 1.2  # default
-        odds_tuple = None
-
-        if odds_data.get("odds_h") and odds_data.get("odds_d") and odds_data.get("odds_a"):
-            oh, od, oa = odds_data["odds_h"], odds_data["odds_d"], odds_data["odds_a"]
-            raw = [1.0 / oh, 1.0 / od, 1.0 / oa]
-            ov = sum(raw)
-            p_h, p_d, p_a = raw[0] / ov, raw[1] / ov, raw[2] / ov
-            over_under = None
-            if odds_data.get("over") and odds_data.get("under"):
-                ou = (odds_data["over"] + odds_data["under"]) / 2
-                over_under = 2.5 if ou > 1.8 else None
-            lam_h0, lam_a0 = odds_to_lambda(p_h, p_d, p_a, over_under)
-            odds_tuple = (oh, od, oa)
-
-        t1, t2 = "", ""
-        from core.rules import _parse_teams
-        parsed = _parse_teams(match)
-        if parsed and parsed[0] and parsed[1]:
-            t1, t2 = parsed
-
-        if has_branches:
-            branches = []
-            for u in uncertainty:
-                penalty = float(u.get("effect", 0.85))
-
-                mods_a = LambdaModifiers(
-                    attack=modifiers.attack, defense=modifiers.defense,
-                    tactical=modifiers.tactical, coach_intent=modifiers.coach_intent,
-                    scenario=modifiers.scenario, home_adv=modifiers.home_adv,
-                    confidence=modifiers.confidence,
-                )
-                mods_b = LambdaModifiers(
-                    attack=modifiers.attack * penalty,
-                    defense=modifiers.defense,
-                    tactical=modifiers.tactical,
-                    coach_intent=modifiers.coach_intent,
-                    scenario=modifiers.scenario,
-                    home_adv=modifiers.home_adv,
-                    confidence=modifiers.confidence,
-                )
-
-                branches.append({
-                    "label": u.get("scenario_a", "首发/正常"),
-                    "weight": u.get("weight_a", 0.5),
-                    "modifiers": mods_a,
-                })
-                branches.append({
-                    "label": u.get("scenario_b", "替补/缺阵"),
-                    "weight": u.get("weight_b", 0.5),
-                    "modifiers": mods_b,
-                })
-
-            branch_result = predict_branched(t1, t2, lam_h0, lam_a0, branches)
-            pred = branch_result.blended
-            st.session_state.branch_result = branch_result
+    if add_queue and match.strip():
+        if match.strip() not in st.session_state._predict_queue:
+            st.session_state._predict_queue.append(match.strip())
+            st.toast(f"已加入: {match.strip()}", icon="📋")
         else:
-            pred = predict_match(t1, t2, lam_h0, lam_a0, modifiers, odds_tuple)
-            st.session_state.branch_result = None
+            st.toast("已在队列中")
 
-        # ── Step 4: Report ──
-        prog.progress(75, text="📝 生成推演报告...")
+    if st.session_state._predict_queue:
+        st.divider()
+        st.caption(f"📋 待推演队列 ({len(st.session_state._predict_queue)} 场)")
+        cols = st.columns([6, 1, 1])
+        for i, m in enumerate(st.session_state._predict_queue):
+            with cols[0]:
+                st.write(f"{i+1}. {m}")
+            with cols[1]:
+                if st.button("🗑️", key=f"rmq_{i}"):
+                    st.session_state._predict_queue.pop(i)
+                    st.rerun()
+            with cols[2]:
+                if st.button("⚡", key=f"runq_{i}"):
+                    result = _do_prediction(m, st.progress(0, text=f"⏳ {m}"))
+                    if result == "ok":
+                        st.session_state.fresh_result = True
+                        st.session_state.current_match = m
+                        st.session_state._predict_queue.pop(i)
+                    else:
+                        st.session_state._predict_queue.pop(i)
+                    st.rerun()
 
-        math_json = json.dumps({
-            "淘汰赛": is_ko,
-            **pred.to_json(),
-            "定律修正因子": {
-                "attack": round(modifiers.attack, 3),
-                "defense": round(modifiers.defense, 3),
-                "tactical": round(modifiers.tactical, 3),
-                "coach_intent": round(modifiers.coach_intent, 3),
-                "scenario": round(modifiers.scenario, 3),
-                "home_adv": round(modifiers.home_adv, 3),
-            },
-            "教练信息": coach_info,
-            "触发定律": triggered,
-            "赔率推导λ": f"{lam_h0:.2f}/{lam_a0:.2f}",
-        }, ensure_ascii=False)
-
-        report_prompt = (
-            f"赛前数据:\n{search_report[:6000]}\n\n"
-            f"数学计算结果:\n{json.dumps(pred.to_json(), ensure_ascii=False)}\n"
-            f"修正因子: {json.dumps({k: round(v,3) for k,v in modifiers.__dict__.items()}, ensure_ascii=False)}\n"
-            f"触发的定律: {json.dumps([t['name'] for t in triggered], ensure_ascii=False)}\n"
-        )
-
-        from core.config import MODEL_FAST, MODEL_PRO
-        analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY,
-                                  MODEL_FAST, fallback_cfgs=[MODEL_PRO])
-        if not analysis:
-            analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY,
-                                      MODEL_FAST)
-
-        st.session_state.analysis_report = analysis
-        st.session_state.math_json = math_json
-        st.session_state.math_prediction = pred
-        st.session_state.fresh_result = True
-
-        # ── Step 5: Save ──
-        saved = save_record(
-            match=match,
-            search_report=search_report,
-            analysis_report=analysis,
-            math_json=math_json,
-            triggered_laws=triggered,
-            is_knockout=is_ko,
-            match_time=st.session_state.current_match_time,
-        )
-        deduct_quota(st.session_state.username)
-
-        prog.empty()
-        if saved:
-            st.success("✅ 推演完成！")
-            st.rerun()
-        else:
-            st.warning("⚠️ 推演结果未能保存，请截图保存数据。")
+        c_ra, c_cl = st.columns(2)
+        with c_ra:
+            if st.button("⚡ 推演队列全部", use_container_width=True, type="primary",
+                         disabled=len(st.session_state._predict_queue) == 0):
+                queue = list(st.session_state._predict_queue)
+                bar = st.progress(0, text="⏳ 队列批量推演...")
+                total = len(queue); okn = skn = fln = 0
+                for i, m in enumerate(queue):
+                    bar.progress((i+1)/total, text=f"[{i+1}/{total}] {m}")
+                    r = _do_prediction(m, None)
+                    if r == "ok": okn += 1
+                    elif r == "skip": skn += 1
+                    else: fln += 1
+                bar.empty()
+                st.session_state._predict_queue.clear()
+                msg = f"完成 {total} 场: 成功 {okn}"
+                if skn: msg += f", 跳过 {skn}"
+                if fln: msg += f", 失败 {fln}"
+                st.success(msg) if not fln else st.warning(msg)
+                if okn > 0: st.rerun()
+        with c_cl:
+            if st.button("🗑️ 清空队列", use_container_width=True):
+                st.session_state._predict_queue.clear()
+                st.rerun()
 
     # ── Display Results ──
     _fresh = st.session_state.pop("fresh_result", False)
