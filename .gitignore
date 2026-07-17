@@ -7,6 +7,8 @@ build/
 *.bat
 .claude/
 history_*.json
+seed_laws.py
+benchmark*.json
 .deep-copilot/
 streamlit
 *.sql

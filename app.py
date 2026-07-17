@@ -751,14 +751,28 @@ if st.session_state.view == "history":
                 unsafe_allow_html=True,
             )
 
-            # Triggered Laws (from math_json)
-            tl = mj.get("triggered_laws", [])
+            # Triggered Laws
+            tl = mj.get("触发定律") or mj.get("triggered_laws", [])
             if tl:
-                law_names = []
+                cards = []
                 for t in tl:
-                    name = t.get("name", t) if isinstance(t, dict) else t
-                    law_names.append(f'<span class="badge">📜 {name}</span>')
-                st.markdown(" ".join(law_names), unsafe_allow_html=True)
+                    if isinstance(t, dict):
+                        name = t.get("name", "?")
+                        grade = t.get("grade", "D")
+                        cls = "law-grade-s" if grade in ("S", "A") else ("law-grade-d" if grade == "D" else "")
+                        mm = t.get("modifier_map", {})
+                        effects = " . ".join(f"{k} x{v}" for k, v in mm.items())
+                        tc = t.get("triggers_count", 0)
+                        cc = t.get("correct_count", 0)
+                        acc = f"{round(cc/tc*100)}%" if tc > 0 else "新"
+                        cards.append(
+                            f'<span class="badge law-grade {cls}">{grade}</span>'
+                            f'<strong>{name}</strong>'
+                            f'<span style="font-size:.75rem;color:#8899bb"> {effects} | {tc}次·{acc}</span>'
+                        )
+                    else:
+                        cards.append(f'<span class="badge">{t}</span>')
+                st.markdown("<br>".join(cards), unsafe_allow_html=True)
 
             # Buttons
             bcols = st.columns([1, 1, 1, 1])

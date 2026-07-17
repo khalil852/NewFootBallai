@@ -226,7 +226,7 @@ def calibrate_record(record: dict, laws: list[dict],
         mj = json.loads(record.get("math_json", "{}")) if isinstance(record.get("math_json"), str) else record.get("math_json", {})
     except (json.JSONDecodeError, TypeError):
         pass
-    triggered_names = mj.get("triggered_laws", [])
+    triggered_names = mj.get("触发定律") or mj.get("triggered_laws", [])
 
     if triggered_names and cal is not None:
         is_correct = cal.result_match or cal.score_match
