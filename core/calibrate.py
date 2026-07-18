@@ -175,22 +175,38 @@ def calibrate_record(record: dict, laws: list[dict],
 
     key = api_key or DEEPSEEK_KEY
 
-    # ── 赛后搜索 ──
-    post_data = search_post_match(match_name)
+    # ── 赛后比分（优先 football-data.org 结构化数据） ──
+    from core.rules import parse_teams as _parse_teams
+    _home, _away = _parse_teams(match_name)
+    _api_score = None
+    if _home and _away:
+        try:
+            from core.football_api import get_match as _fb_match
+            _api_score = _fb_match(_home, _away, tournament="EC")
+            if not _api_score:
+                _api_score = _fb_match(_home, _away, tournament="WC2022")
+        except Exception:
+            pass
 
-    # ── 提取实际比分 ──
-    post_summary = ""
-    if post_data:
-        post_summary = _deepseek_chat(
-            PROMPT_CALIBRATE,
-            f"汇总以下赛后数据:\n{post_data}\n对阵: {match_name}",
-            key,
-        )
+    if _api_score and _api_score.get("status") == "FINISHED":
+        ah, aa = _api_score["home_goals"], _api_score["away_goals"]
+        xg_h, xg_a = None, None
+        post_summary = f"比分: {_home} {ah}-{aa} {_away} (football-data.org)"
     else:
-        post_summary = _deepseek_chat(
-            PROMPT_CALIBRATE,
-            f"**【硬性规则】** {match_name} 已结束，直接给出最终比分。\n"
-            f"赛前数据:\n{search_report[:3000]}",
+        # ── 回退：Tavily 搜索 ──
+        post_data = search_post_match(match_name)
+        post_summary = ""
+        if post_data:
+            post_summary = _deepseek_chat(
+                PROMPT_CALIBRATE,
+                f"汇总以下赛后数据:\n{post_data}\n对阵: {match_name}",
+                key,
+            )
+        if not post_summary:
+            post_summary = _deepseek_chat(
+                PROMPT_CALIBRATE,
+                f"**【硬性规则】** {match_name} 已结束，直接给出最终比分。\n"
+                f"赛前数据:\n{search_report[:3000]}",
             key, MODEL_CALIBRATE,
         )
 
