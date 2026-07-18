@@ -101,12 +101,20 @@ def _search_with(topic: str, rounds: list[str]) -> str:
     return results
 
 
+_SPORT = " football match soccer World Cup European Championship "
+
+
+def _football(kw: str) -> str:
+    """给搜索词加上足球限定，避免搜到排球/篮球"""
+    return kw + _SPORT
+
+
 def search_quantitative(match_query: str) -> str:
     en_home, en_away = _team_names(match_query)
     rounds = [
-        f"{en_home} {en_away} match odds 1X2 over under 2026",
-        f"{en_home} vs {en_away} betting odds winner draw",
-        f"{match_query} 赔率 欧赔 亚盘",
+        _football(f"{en_home} {en_away} match odds 1X2 over under"),
+        _football(f"{en_home} vs {en_away} betting odds winner draw"),
+        f"{match_query} 足球 赔率 欧赔 亚盘",
     ]
     return _search_with("赔率", rounds)
 
@@ -114,13 +122,13 @@ def search_quantitative(match_query: str) -> str:
 def search_qualitative(match_query: str) -> str:
     en_home, en_away = _team_names(match_query)
     rounds = [
-        f"{en_home} {en_away} injury news squad latest World Cup 2026",
-        f"{en_home} vs {en_away} starting lineup predicted XI formation 2026",
-        f"{en_home} {en_away} coach press conference tactics preview 2026",
-        f"{en_home} {en_away} recent form group standings 2026",
-        f"{en_home} {en_away} key players preview analysis 2026",
-        f"{match_query} 伤病 首发 阵容 教练 战术 2026",
-        f"{match_query} 近期战绩 出线形势 2026",
+        _football(f"{en_home} {en_away} injury news squad latest"),
+        _football(f"{en_home} vs {en_away} starting lineup predicted XI formation"),
+        _football(f"{en_home} {en_away} coach press conference tactics preview"),
+        _football(f"{en_home} {en_away} recent form group standings"),
+        _football(f"{en_home} {en_away} key players preview analysis"),
+        f"{match_query} 足球 伤病 首发 阵容 教练 战术",
+        f"{match_query} 足球 近期战绩 出线形势",
     ]
     return _search_with("新闻", rounds)
 
@@ -128,10 +136,10 @@ def search_qualitative(match_query: str) -> str:
 def search_post_match(match_query: str) -> str:
     en_home, en_away = _team_names(match_query)
     rounds = [
-        f"{en_home} {en_away} final score result match report 2026",
-        f"{en_home} vs {en_away} xG expected goals match statistics 2026",
-        f"{en_home} {en_away} goalscorers highlights",
-        f"{match_query} 最终比分 赛后技术统计 xG",
+        _football(f"{en_home} {en_away} final score result match report"),
+        _football(f"{en_home} vs {en_away} xG expected goals match statistics"),
+        _football(f"{en_home} {en_away} goalscorers highlights"),
+        f"{match_query} 足球 最终比分 赛后技术统计 xG",
     ]
     return _search_with("赛后", rounds)
 
