@@ -259,20 +259,41 @@ def calibrate_record(record: dict, laws: list[dict],
             pass
 
     # ── 构建记忆上下文 ──
-    recent_summary = "\n".join(
-        f"{r.get('match','')}: {r.get('score_summary','')}"
-        for r in recent_calibrations[-10:]
-    ) if recent_calibrations else "(无)"
+    recent_summary_lines = []
+    for cal_rec in recent_calibrations[-10:]:
+        cal_data = cal_rec.get("calibration", "{}")
+        ms = ""
+        try:
+            cd = json.loads(cal_data) if isinstance(cal_data, str) else cal_data
+            if isinstance(cd, dict) and "math_score" in cd:
+                ms = cd["math_score"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+        if ms:
+            recent_summary_lines.append(
+                f"{cal_rec.get('match','?')}: 推演{ms.get('predicted','?')} "
+                f"实际{ms.get('actual','?')} 评分{ms.get('accuracy',0)} "
+                f"偏差{ms.get('deviation',0)}球"
+            )
+        else:
+            recent_summary_lines.append(f"{cal_rec.get('match','?')}: (无详细数据)")
 
-    bias_text = ""
+    recent_summary = "\n".join(recent_summary_lines) if recent_summary_lines else "(无校准记录)"
+
     if bias_report:
         bias_text = (
-            f"全局({bias_report['total_matches']}场): "
-            f"{bias_report['bias_direction']}, "
-            f"场均偏差 {bias_report['avg_deviation']}球, "
-            f"比分准确率 {bias_report['score_accuracy']}%, "
-            f"胜负准确率 {bias_report['result_accuracy']}%"
+            f"全局({bias_report.get('total_matches',0)}场): "
+            f"{bias_report.get('bias_direction','?')}, "
+            f"场均偏差 {bias_report.get('avg_deviation',0)}球, "
+            f"比分准确率 {bias_report.get('score_accuracy',0)}%, "
+            f"胜负准确率 {bias_report.get('result_accuracy',0)}%"
         )
+        if bias_report.get("suggestion"):
+            bias_text += f" | 建议: {bias_report['suggestion']}"
+        if bias_report.get("ko_deviation") is not None:
+            bias_text += f" | 淘汰赛偏差 {bias_report['ko_deviation']:+.1f}球"
+        if bias_report.get("grp_deviation") is not None:
+            bias_text += f" | 小组赛偏差 {bias_report['grp_deviation']:+.1f}球"
 
     # ── 提取赛后技术统计 ──
     stats_html = ""
