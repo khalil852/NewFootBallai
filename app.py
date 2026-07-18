@@ -371,11 +371,16 @@ if st.session_state.view == "predict":
             if not match:
                 st.warning("请先输入比赛名称")
             else:
-                result = _do_prediction(match)
+                prog = st.progress(0, text="⏳ 搜索赛前数据...")
+                result = _do_prediction(match, prog)
+                prog.empty()
                 if result == "ok":
+                    st.success("✅ 推演完成！")
                     st.session_state.fresh_result = True
                     st.session_state.current_match = match
                     st.rerun()
+                else:
+                    st.warning("⚠️ 推演失败，请重试")
     with c2:
         add_queue = st.button("📋 加入队列", use_container_width=True, key="add_queue")
 
