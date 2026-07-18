@@ -264,7 +264,7 @@ def _do_prediction(match: str, prog=None) -> str:
     """执行一条推演，返回 'ok' / 'skip' / 'fail'"""
     ok, msg = can_predict(st.session_state.username)
     if not ok:
-        st.toast(f"❌ {match}: {msg}", icon="❌")
+        st.session_state._last_error = f"❌ 今日推演次数已用完"
         return "skip"
 
     laws = load_laws(st.session_state.username)
@@ -281,7 +281,7 @@ def _do_prediction(match: str, prog=None) -> str:
 
     combined = quant_data + "\n" + qual_data
     if not combined.strip():
-        st.toast(f"⚠️ {match}: 无搜索结果", icon="⚠️")
+        st.session_state._last_error = f"⚠️ {match}: Tavily 搜索未返回结果"
         return "skip"
 
     from core.config import MODEL_FAST, MODEL_PRO
@@ -289,7 +289,7 @@ def _do_prediction(match: str, prog=None) -> str:
         f"为 {match} 搜集赛前信息并输出结构化数据。\n定量数据(赔率等):\n{quant_data}\n\n定性数据(伤病/阵容):\n{qual_data}",
         DEEPSEEK_KEY, MODEL_FAST, fallback_cfgs=[MODEL_PRO])
     if not sr:
-        st.toast(f"⚠️ {match}: 搜索汇总失败", icon="⚠️")
+        st.session_state._last_error = f"⚠️ {match}: DeepSeek 搜索汇总返回空，请稍后重试"
         return "skip"
 
     search_report = clean_report(sr)
@@ -363,6 +363,10 @@ def _do_prediction(match: str, prog=None) -> str:
 #  PREDICT TAB
 # ===================================================================
 if st.session_state.view == "predict":
+    # 显示持久化的错误消息
+    if st.session_state.get("_last_error"):
+        st.error(st.session_state._last_error)
+
     # ── Single Predict ──
     match = st.text_input("比赛对阵", placeholder="法国 vs 塞内加尔", key="match_input")
     c1, c2 = st.columns([3, 1])
@@ -376,8 +380,12 @@ if st.session_state.view == "predict":
                 prog.empty()
                 if result == "ok":
                     st.success("✅ 推演完成！")
+                    st.session_state._last_error = ""
                     st.session_state.fresh_result = True
                     st.session_state.current_match = match
+                    st.rerun()
+                elif result == "skip":
+                    st.session_state._last_error = "⚠️ 搜索未返回有效数据，请检查比赛名称或稍后重试"
                     st.rerun()
                 else:
                     st.warning("⚠️ 推演失败，请重试")
@@ -410,11 +418,15 @@ if st.session_state.view == "predict":
                 if st.button("⚡", key=f"runq_{i}"):
                     result = _do_prediction(m, st.progress(0, text=f"⏳ {m}"))
                     if result == "ok":
+                        st.success(f"✅ {m} 推演完成！")
+                        st.session_state._predict_queue.pop(i)
                         st.session_state.fresh_result = True
                         st.session_state.current_match = m
-                        st.session_state._predict_queue.pop(i)
+                        st.rerun()
+                    elif result == "skip":
+                        st.warning(f"⚠️ {m}: 搜索未返回有效数据")
                     else:
-                        st.session_state._predict_queue.pop(i)
+                        st.error(f"❌ {m}: 保存失败")
                     st.rerun()
 
         c_ra, c_cl = st.columns(2)

@@ -43,10 +43,10 @@ def save_record(match: str, search_report: str, analysis_report: str,
                           json=rec, timeout=10)
         if r.status_code in (200, 201):
             return True
-        st.error(f"保存失败 [{r.status_code}]: {r.text[:300]}")
+        st.session_state._last_error = f"保存失败 [{r.status_code}]: {r.text[:300]}"
         return False
     except Exception as e:
-        st.error(f"保存失败: {e}")
+        st.session_state._last_error = f"保存失败: {e}"
         return False
 
 
