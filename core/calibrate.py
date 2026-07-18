@@ -333,6 +333,24 @@ def calibrate_record(record: dict, laws: list[dict],
     cr = _deepseek_chat(PROMPT_CALIBRATE, calibrate_prompt, key,
                         MODEL_CALIBRATE, fallback_cfgs=CALIBRATE_FALLBACKS)
 
+    # ── 如果偏差≥1球但 LLM 没输出 JSON，再单独追问一次 ──
+    has_json = bool(re.search(r'```json\s*\[[\s\S]*?\]\s*```', cr)) if cr else False
+    if not has_json and cal.goal_deviation >= 1.0 and cr:
+        st.toast("🔄 未检测到定律JSON，追加追问...", icon="⚠️")
+        extra_prompt = (
+            f"上一轮校准中未输出定律JSON。请仅输出JSON。\n"
+            f"比赛: {match_name}\n"
+            f"推演 {pred.locked_h}-{pred.locked_a} 实际 {ah}-{aa} 偏差{cal.goal_deviation}球\n"
+            f"原因: {cr[:500]}\n"
+            f"现有定律: {json.dumps([l.get('name','') for l in laws], ensure_ascii=False)}\n"
+            f"从赛前报告中找到可验证的触发条件，输出新定律JSON:\n"
+            f'```json\n[{{"name":"","tree":"","trigger_mode":"keyword",'
+            f'"trigger_config":{{"keywords":[""]}},"modifier_map":{{}}}}]\n```'
+        )
+        cr2 = _deepseek_chat("你只输出JSON。", extra_prompt, key, MODEL_PRO)
+        if cr2:
+            cr += "\n" + cr2
+
     # ── LLM 失败不阻断：至少保存数学评分 ──
     if not cr:
         cal_result = {
