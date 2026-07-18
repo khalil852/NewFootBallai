@@ -333,6 +333,30 @@ def calibrate_record(record: dict, laws: list[dict],
     cr = _deepseek_chat(PROMPT_CALIBRATE, calibrate_prompt, key,
                         MODEL_CALIBRATE, fallback_cfgs=CALIBRATE_FALLBACKS)
 
+    # ── LLM 失败不阻断：至少保存数学评分 ──
+    if not cr:
+        cal_result = {
+            "math_score": {
+                "accuracy": cal.accuracy_score,
+                "predicted": f"{pred.locked_h}-{pred.locked_a}",
+                "actual": f"{ah}-{aa}",
+                "deviation": cal.goal_deviation,
+                "score_match": cal.score_match,
+                "result_match": cal.result_match,
+                "xG": f"{xg_h or '?'}-{xg_a or '?'}",
+            },
+            "data_summary": "",
+            "bias_analysis": "⚠️ 偏差分析模型暂时不可用，仅展示数学评分。",
+            "law_updates": {"new": [], "modified": [], "degraded": []},
+        }
+        try:
+            from core.supabase_client import get_supabase
+            get_supabase().table("history").update(
+                {"calibration": json.dumps(cal_result, ensure_ascii=False)}
+            ).eq("id", record["id"]).execute()
+        except Exception: pass
+        return True, cal_result, 0
+
     # ── 提取偏差分析文本 ──
     bias_analysis = re.sub(r'```json[\s\S]*?```', '', cr).strip()
 
