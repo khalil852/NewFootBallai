@@ -157,8 +157,11 @@ def run_rules(search_report: str, structured: dict | None,
 
     uncertainty = []
     if structured and structured.get("uncertainty"):
-        for u in structured["uncertainty"]:
-            if u.get("player") and u.get("scenario_a") and u.get("scenario_b"):
+        unc = structured["uncertainty"]
+        if not isinstance(unc, list):
+            unc = []
+        for u in unc:
+            if isinstance(u, dict) and u.get("player") and u.get("scenario_a") and u.get("scenario_b"):
                 uncertainty.append(u)
 
     if triggered:
