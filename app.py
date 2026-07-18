@@ -270,18 +270,23 @@ def _do_prediction(match: str, prog=None) -> str:
     laws = load_laws(st.session_state.username)
 
     if prog: prog.progress(0, text=f"⏳ {match} 搜索中...")
+    quant_error = qual_error = ""
     try:
         quant_data = search_quantitative(match)
-    except Exception:
+    except Exception as e:
+        quant_error = str(e)[:80]
         quant_data = ""
     try:
         qual_data = search_qualitative(match)
-    except Exception:
+    except Exception as e:
+        qual_error = str(e)[:80]
         qual_data = ""
 
     combined = quant_data + "\n" + qual_data
     if not combined.strip():
-        st.session_state._last_error = f"⚠️ {match}: Tavily 搜索未返回结果"
+        detail = f"定量:{quant_error}" if quant_error else ""
+        detail += f" 定性:{qual_error}" if qual_error else ""
+        st.session_state._last_error = f"⚠️ Tavily 搜索未返回结果 {detail}"
         return "skip"
 
     from core.config import MODEL_FAST, MODEL_PRO

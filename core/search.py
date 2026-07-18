@@ -47,19 +47,26 @@ def _deepseek_chat(system_prompt: str, user_content: str,
 
 def _tavily_search(query: str, include_domains: list[str] | None = None,
                    max_results: int = 8) -> str:
-    if not TAVILY_KEY: return ""
+    if not TAVILY_KEY:
+        return "__ERR__Tavily API Key 未配置"
     payload = {"api_key": TAVILY_KEY, "query": query, "search_depth": "advanced",
                "max_results": max_results}
     if include_domains: payload["include_domains"] = include_domains
     try:
         r = requests.post(TAVILY_URL, json=payload,
                           headers={"Content-Type": "application/json"}, timeout=20)
+        if r.status_code != 200:
+            err = r.json().get("error", r.text[:200])
+            return f"__ERR__Tavily [{r.status_code}]: {err}"
         items = []
         for item in r.json().get("results", []):
             c = item.get("content", "")
             if len(c) > 20: items.append(f"- {item.get('title','')}: {c[:600]}")
         return "\n".join(items)
-    except Exception: return ""
+    except requests.exceptions.Timeout:
+        return "__ERR__Tavily 超时"
+    except Exception as e:
+        return f"__ERR__Tavily 连接: {e}"
 
 
 def _team_names(query: str) -> tuple[str, str]:
@@ -76,6 +83,24 @@ def _team_names(query: str) -> tuple[str, str]:
     return query.strip(), ""
 
 
+def _search_with(topic: str, rounds: list[str]) -> str:
+    """搜索，成功返回内容，全失败则抛出异常"""
+    errors = ""
+    results = ""
+    with ThreadPoolExecutor(max_workers=min(len(rounds), 8)) as ex:
+        futures = {ex.submit(_tavily_search, q): q for q in rounds}
+        for f in as_completed(futures):
+            r = f.result()
+            if not r: continue
+            if r.startswith("__ERR__"):
+                errors += f"[{topic}] {r[7:]}\n"
+            else:
+                results += r + "\n"
+    if not results:
+        raise RuntimeError(errors.strip() if errors.strip() else f"{topic}搜索全部为空")
+    return results
+
+
 def search_quantitative(match_query: str) -> str:
     en_home, en_away = _team_names(match_query)
     rounds = [
@@ -83,13 +108,7 @@ def search_quantitative(match_query: str) -> str:
         f"{en_home} vs {en_away} betting odds winner draw",
         f"{match_query} 赔率 欧赔 亚盘",
     ]
-    results = ""
-    with ThreadPoolExecutor(max_workers=len(rounds)) as ex:
-        futures = [ex.submit(_tavily_search, q) for q in rounds]
-        for f in as_completed(futures):
-            r = f.result()
-            if r: results += r + "\n"
-    return results
+    return _search_with("赔率", rounds)
 
 
 def search_qualitative(match_query: str) -> str:
@@ -103,13 +122,7 @@ def search_qualitative(match_query: str) -> str:
         f"{match_query} 伤病 首发 阵容 教练 战术 2026",
         f"{match_query} 近期战绩 出线形势 2026",
     ]
-    results = ""
-    with ThreadPoolExecutor(max_workers=min(len(rounds), 6)) as ex:
-        futures = [ex.submit(_tavily_search, q) for q in rounds]
-        for f in as_completed(futures):
-            r = f.result()
-            if r: results += r + "\n"
-    return results
+    return _search_with("新闻", rounds)
 
 
 def search_post_match(match_query: str) -> str:
@@ -120,13 +133,7 @@ def search_post_match(match_query: str) -> str:
         f"{en_home} {en_away} goalscorers highlights",
         f"{match_query} 最终比分 赛后技术统计 xG",
     ]
-    results = ""
-    with ThreadPoolExecutor(max_workers=len(rounds)) as ex:
-        futures = [ex.submit(_tavily_search, q) for q in rounds]
-        for f in as_completed(futures):
-            r = f.result()
-            if r: results += r + "\n"
-    return results
+    return _search_with("赛后", rounds)
 
 
 def extract_odds(report_text: str) -> dict:
