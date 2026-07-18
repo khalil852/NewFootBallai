@@ -479,30 +479,24 @@ def _validate_trigger(law: dict) -> bool:
     if trigger_mode != "always" and len(config_str) < 6:
         return False
 
-    # 4. modifier_map 值必须在 0.70-1.30 范围内
+    # 4. modifier_map 值必须在 0.60-1.40 范围内
     mm = law.get("modifier_map", {})
     for k, v in mm.items():
         try:
             fv = float(v)
-            if fv < 0.70 or fv > 1.30:
+            if fv < 0.60 or fv > 1.40:
                 st.toast(f"跳过定律: modifier {k}={fv} 超出范围", icon="⚠️")
                 return False
         except (ValueError, TypeError):
             return False
 
-    # 5. keyword 模式的 keywords 不能全是赛后词汇
+    # 5. keyword 模式的 keywords 必须有实际内容
     if trigger_mode == "keyword":
         keywords = law.get("trigger_config", {}).get("keywords", [])
         if isinstance(keywords, list):
-            all_post = all(
-                any(w in kw.lower() for w in FORBIDDEN_WORDS[:8])
-                for kw in keywords
-            )
-            if all_post:
-                st.toast("跳过定律: 所有关键词都是赛后词汇", icon="⚠️")
-                return False
-            # 至少一个关键词长度 > 1
-            if not any(len(kw) > 1 for kw in keywords):
+            valid_kws = [kw for kw in keywords if isinstance(kw, str) and len(kw.strip()) > 1]
+            if not valid_kws:
+                st.toast("跳过定律: 无有效关键词", icon="⚠️")
                 return False
 
     return True
