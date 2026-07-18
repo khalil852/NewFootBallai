@@ -456,6 +456,17 @@ def calibrate_record(record: dict, laws: list[dict],
             item["username"] = st.session_state.username
             item.setdefault("status", "active")
             item.setdefault("auto_generated", True)
+            # Old schema required fields
+            item.setdefault("content", item.get("name", ""))
+            item.setdefault("trigger_condition", item.get("name", ""))
+            item.setdefault("lambda_effect", str(item.get("modifier_map", {})))
+            item.setdefault("category", item.get("tree", "通用"))
+            item.setdefault("effect_type", "multiply")
+            item.setdefault("trigger_keywords", [])
+            mm = item.get("modifier_map") or {}
+            keys = list(mm.keys())
+            item.setdefault("effect_target", keys[0] if keys else "attack")
+            item.setdefault("effect_value", float(mm[keys[0]]) if keys else 1.0)
 
             try:
                 r = _req.post(f"{SUPABASE_URL.rstrip('/')}/rest/v1/laws",
