@@ -383,60 +383,93 @@ def calibrate_record(record: dict, laws: list[dict],
     modified_laws = []
     degraded_laws = []
     auto_count = 0
+
+    # 用 Supabase SDK 直接保存（不走 REST 兜底）
+    import requests as _req
+
     try:
-        for block in re.finditer(r'```json\s*(.*?)\s*```', cr, re.DOTALL):
-            data = json.loads(block.group(1))
-            items = data if isinstance(data, list) else [data]
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
+        json_blocks = list(re.finditer(r'```json\s*([\s\S]*?)\s*```', cr, re.DOTALL))
+        st.toast(f"🔍 找到 {len(json_blocks)} 个JSON块", icon="ℹ️")
+    except Exception:
+        json_blocks = []
 
-                has_id = bool(item.get("id"))
+    for block in json_blocks:
+        raw = block.group(1).strip()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as je:
+            st.toast(f"⚠️ JSON解析失败: {str(je)[:50]}", icon="⚠️")
+            continue
 
-                # 修改已有定律
-                if has_id and item.get("trigger_config") is not None:
-                    from core.database import save_law
-                    save_law({
-                        "id": item["id"],
-                        "username": st.session_state.username,
-                        "trigger_config": item.get("trigger_config", {}),
-                        "modifier_map": item.get("modifier_map", {}),
-                        "name": item.get("name", ""),
-                    })
-                    modified_laws.append(item.get("name", item["id"]))
-                    auto_count += 1
-                    continue
+        items = data if isinstance(data, list) else [data]
+        st.toast(f"📋 JSON块含 {len(items)} 项", icon="ℹ️")
 
-                # 查重 — 同名定律已存在则跳过
-                existing_names = {l.get("name","") for l in laws}
-                if item.get("name","") in existing_names:
-                    st.toast(f"跳过定律: '{item['name']}' 已存在", icon="⚠️")
-                    continue
+        for item in items:
+            if not isinstance(item, dict):
+                # 可能是降级ID列表
+                if isinstance(item, str) and len(item) > 2:
+                    degraded_laws.append(item)
+                    try:
+                        _req.patch(f"{SUPABASE_URL.rstrip('/')}/rest/v1/laws?id=eq.{item}",
+                                   headers={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}",
+                                            "Content-Type":"application/json"},
+                                   json={"status":"inactive"}, timeout=10)
+                        st.toast(f"📉 降级: {item}", icon="📉")
+                    except Exception: pass
+                continue
 
-                # 新增定律 — 必须通过校验
-                if _validate_trigger(item):
-                    lid = f"auto_{datetime.now().strftime('%Y%m%d%H%M%S')}_{auto_count}"
-                    item["id"] = lid
-                    item["username"] = st.session_state.username
-                    item.setdefault("status", "active")
-                    item.setdefault("auto_generated", True)
-                    from core.database import save_law
-                    save_law(item)
+            has_id = bool(item.get("id"))
+
+            # 修改已有定律
+            if has_id:
+                try:
+                    patch_data = {"name": item.get("name", ""),
+                                  "trigger_config": item.get("trigger_config", {}),
+                                  "modifier_map": item.get("modifier_map", {})}
+                    r = _req.patch(f"{SUPABASE_URL.rstrip('/')}/rest/v1/laws?id=eq.{item['id']}",
+                                   headers={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}",
+                                            "Content-Type":"application/json"},
+                                   json=patch_data, timeout=10)
+                    if r.status_code in (200, 204):
+                        modified_laws.append(item.get("name", item["id"]))
+                        auto_count += 1
+                        st.toast(f"✏️ 修改定律: {item.get('name','?')}", icon="✏️")
+                    else:
+                        st.toast(f"❌ 修改失败[{r.status_code}]: {r.text[:80]}", icon="❌")
+                except Exception as e:
+                    st.toast(f"❌ 修改异常: {str(e)[:60]}", icon="❌")
+                continue
+
+            # 查重
+            existing_names = {l.get("name","") for l in laws}
+            if item.get("name","") in existing_names:
+                st.toast(f"⏭️ 跳过: '{item['name']}' 已存在", icon="⚠️")
+                continue
+
+            # 新增
+            if not _validate_trigger(item):
+                st.toast(f"⏭️ 跳过: '{item.get('name','?')}' 校验不通过", icon="⚠️")
+                continue
+
+            lid = f"auto_{datetime.now().strftime('%Y%m%d%H%M%S')}_{auto_count}"
+            item["id"] = lid
+            item["username"] = st.session_state.username
+            item.setdefault("status", "active")
+            item.setdefault("auto_generated", True)
+
+            try:
+                r = _req.post(f"{SUPABASE_URL.rstrip('/')}/rest/v1/laws",
+                              headers={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}",
+                                       "Content-Type":"application/json"},
+                              json=item, timeout=10)
+                if r.status_code in (200, 201):
                     new_laws.append(item.get("name", lid))
                     auto_count += 1
-
-        degrade_block = re.search(
-            r'(?:建议降级|降级).*?```json\s*(.*?)\s*```', cr, re.DOTALL)
-        if degrade_block:
-            degrade_ids = json.loads(degrade_block.group(1))
-            if isinstance(degrade_ids, list):
-                for did in degrade_ids:
-                    from core.database import save_law
-                    save_law({"id": did, "username": st.session_state.username,
-                              "status": "inactive"})
-                    degraded_laws.append(did)
-    except Exception:
-        pass
+                    st.toast(f"✅ 新定律: {item.get('name','?')}", icon="✅")
+                else:
+                    st.toast(f"❌ 保存失败[{r.status_code}]: {r.text[:100]}", icon="❌")
+            except Exception as e:
+                st.toast(f"❌ 保存异常: {str(e)[:60]}", icon="❌")
 
     # ── 构建结构化校准结果 ──
     cal_result = {
