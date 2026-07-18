@@ -479,45 +479,11 @@ FORBIDDEN_WORDS = [
 
 
 def _validate_trigger(law: dict) -> bool:
-    """校验新定律触发条件的合法性"""
-    config_str = json.dumps(law.get("trigger_config", {}), ensure_ascii=False)
-    trigger_mode = law.get("trigger_mode", "")
-
-    # 1. trigger_mode 必须合法
-    if trigger_mode not in ("keyword", "team", "coach", "match_type", "always"):
+    """仅做最基础校验：trigger_mode 合法 + 有 modifier_map"""
+    mode = law.get("trigger_mode", "")
+    if mode not in ("keyword", "team", "coach", "match_type", "always"):
         return False
-
-    # 2. 不含赛后词汇
-    for w in FORBIDDEN_WORDS:
-        if w in config_str:
-            st.toast(f"跳过定律: 含赛后词汇 '{w}'", icon="⚠️")
-            return False
-
-    # 3. config 不能是空对象（unless always mode）
-    if trigger_mode != "always" and len(config_str) < 6:
-        return False
-
-    # 4. modifier_map 值必须在 0.60-1.40 范围内
-    mm = law.get("modifier_map", {})
-    for k, v in mm.items():
-        try:
-            fv = float(v)
-            if fv < 0.60 or fv > 1.40:
-                st.toast(f"跳过定律: modifier {k}={fv} 超出范围", icon="⚠️")
-                return False
-        except (ValueError, TypeError):
-            return False
-
-    # 5. keyword 模式的 keywords 必须有实际内容
-    if trigger_mode == "keyword":
-        keywords = law.get("trigger_config", {}).get("keywords", [])
-        if isinstance(keywords, list):
-            valid_kws = [kw for kw in keywords if isinstance(kw, str) and len(kw.strip()) > 1]
-            if not valid_kws:
-                st.toast("跳过定律: 无有效关键词", icon="⚠️")
-                return False
-
-    return True
+    return bool(law.get("modifier_map"))
 
 
 def analyze_global_bias(calibrated_records: list[dict]) -> dict | None:
