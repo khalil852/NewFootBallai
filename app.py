@@ -1007,48 +1007,49 @@ if st.session_state.view == "laws":
 #  MATCH DB TAB
 # ===================================================================
 if st.session_state.view == "match_db":
-    st.markdown("#### \u6bd4\u8d5b\u6570\u636e\u5e93")
+    st.markdown("#### 比赛数据库")
     from core.match_db import list_matches, delete_match, save_match
+
+    pre_text = st.text_area("粘贴赛前数据（DeepSeek 输出）", height=120, key="db_pre")
+    post_text = st.text_area("粘贴赛后数据（可选）", height=80, key="db_post")
+    if st.button("解析并保存", use_container_width=True, type="primary"):
+        pl = _parse_match_texts(pre_text, post_text)
+        if not pl:
+            st.error("无法解析")
+        else:
+            ok = 0
+            for p in pl:
+                if p.get("home_team") and p.get("away_team"):
+                    if save_match({"match_name":f"{p['home_team']} vs {p['away_team']}",
+                        "username":st.session_state.username,"home_team":p["home_team"],"away_team":p["away_team"],
+                        "tournament":p.get("tournament",""),"search_report":p.get("search_report",""),
+                        "post_report":p.get("post_report","")}):
+                        ok += 1
+            st.success(f"已保存 {ok}/{len(pl)} 场")
+            st.rerun()
+
+    st.divider()
+
     db_matches = list_matches(st.session_state.username)
+    if not db_matches:
+        st.info("暂无数据，上方粘贴后保存")
 
-    # \u6309\u8d5b\u4e8b\u5206\u7c7b
-    tournaments = set()
     for m in db_matches:
-        t = m.get("tournament", "") or "\u672a\u5206\u7c7b"
-        tournaments.add(t)
-    tournaments = sorted(tournaments)
-    selected_tournament = st.selectbox("\u7b5b\u9009\u8d5b\u4e8b", ["\u5168\u90e8"] + tournaments, key="db_filter")
-
-    tab_list, tab_add = st.tabs(["\u6bd4\u8d5b\u5217\u8868", "\u6dfb\u52a0"])
-    with tab_add:
-        st.caption("\u5728 DeepSeek \u7f51\u9875\u7248\u7528\u63d0\u793a\u8bcd\u641c\u96c6\u4fe1\u606f\uff0c\u628a\u8fd4\u56de\u7684\u8d5b\u524d\u548c\u8d5b\u540e\u6570\u636e\u7c98\u8d34\u5230\u4e0b\u9762\uff0c\u81ea\u52a8\u63d0\u53d6")
-        pre_text = st.text_area("\u8d5b\u524d\u6570\u636e\uff08\u7c98\u8d34 DeepSeek \u8fd4\u56de\uff09", height=180, key="db_pre")
-        post_text = st.text_area("\u8d5b\u540e\u6570\u636e\uff08\u7c98\u8d34 DeepSeek \u8fd4\u56de\uff0c\u53ef\u9009\uff09", height=100, key="db_post")
-
-        if st.button("\u89e3\u6790\u5e76\u4fdd\u5b58", use_container_width=True, type="primary"):
-            parsed_list = _parse_match_texts(pre_text, post_text)
-            if not parsed_list:
-                st.error("\u65e0\u6cd5\u89e3\u6790\u51fa\u4efb\u4f55\u6bd4\u8d5b\uff0c\u786e\u8ba4\u7c98\u8d34\u7684\u662f\u8d5b\u524d\u6570\u636e")
-            else:
-                ok_count = 0
-                for parsed in parsed_list:
-                    if parsed.get("home_team") and parsed.get("away_team"):
-                        mn = f"{parsed['home_team']} vs {parsed['away_team']}"
-                        save_data = {"match_name":mn,"username":st.session_state.username,
-                            "home_team":parsed["home_team"],"away_team":parsed["away_team"],
-                            "tournament":parsed.get("tournament",""),
-                            "search_report":parsed.get("search_report",""),
-                            "post_report":parsed.get("post_report","")}
-                        ok = save_match(save_data)
-                        if ok:
-                            ok_count += 1
-                        else:
-                            st.warning(f"保存失败: {mn}")
-                if ok_count > 0:
-                    st.success(f"✅ 已保存 {ok_count}/{len(parsed_list)} 场")
-                    for p in parsed_list:
-                        if p.get("home_team"):
-                            st.info(f"**{p['home_team']} vs {p['away_team']}** — {len(p.get('search_report',''))}字")
-                    st.info("切换到「比赛列表」标签查看")
-                else:
-                    st.error("保存失败，检查数据或同名比赛")
+        h = m.get("home_team","?"); a = m.get("away_team","?")
+        pre_len = len(m.get("search_report") or "")
+        post_len = len(m.get("post_report") or "")
+        act = f"实际 {m['actual_h']}-{m['actual_a']}" if m.get("actual_h") is not None else "未赛"
+        with st.expander(f"{h} vs {a} — {act} | 赛前{pre_len}字 赛后{post_len}字", expanded=False):
+            if m.get("search_report"):
+                with st.expander("赛前原始数据", expanded=False):
+                    st.text(m["search_report"][:2000])
+            post_in = st.text_area("赛后数据补充", height=80, key=f"post_{m['id']}")
+            c1,c2 = st.columns(2)
+            with c1:
+                if st.button("保存赛后", key=f"sp_{m['id']}"):
+                    if post_in.strip():
+                        save_match({"match_name":m["match_name"],"post_report":post_in.strip(),"username":m["username"]})
+                        st.success("已更新"); st.rerun()
+            with c2:
+                if st.button("删除", key=f"del_{m['id']}"):
+                    delete_match(m["id"]); st.rerun()
