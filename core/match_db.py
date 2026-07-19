@@ -17,7 +17,9 @@ def list_matches(username: str = "admin") -> list[dict]:
 
 def get_match(match_name: str) -> dict | None:
     try:
-        r = _req.get(f"{_B}/rest/v1/match_data?match_name=eq.{match_name}&limit=1",
+        import urllib.parse
+        encoded = urllib.parse.quote(match_name)
+        r = _req.get(f"{_B}/rest/v1/match_data?match_name=eq.{encoded}&limit=1",
                      headers=_H, timeout=10)
         if r.status_code == 200 and r.json():
             return r.json()[0]
@@ -28,17 +30,26 @@ def get_match(match_name: str) -> dict | None:
 
 def save_match(data: dict) -> bool:
     try:
+        import urllib.parse
         data = {k: v for k, v in data.items()
                 if v is not None and v != "" and not k.startswith("_")}
+        # 只保留表里确定存在的字段
+        safe_fields = ["username","match_name","home_team","away_team","tournament",
+                       "match_time","odds_h","odds_d","odds_a",
+                       "home_injuries","away_injuries","home_coach","away_coach",
+                       "home_formation","away_formation",
+                       "search_report","post_report","actual_h","actual_a"]
+        clean = {k: data[k] for k in safe_fields if k in data and data[k] is not None}
+
         existing = get_match(data.get("match_name", ""))
         if existing:
             r = _req.patch(f"{_B}/rest/v1/match_data?id=eq.{existing['id']}",
-                           headers=_H, json=data, timeout=10)
+                           headers=_H, json=clean, timeout=10)
             if r.status_code not in (200, 204):
                 print(f"[save_match] PATCH {r.status_code}: {r.text[:200]}")
             return r.status_code in (200, 204)
         else:
-            r = _req.post(f"{_B}/rest/v1/match_data", headers=_H, json=data, timeout=10)
+            r = _req.post(f"{_B}/rest/v1/match_data", headers=_H, json=clean, timeout=10)
             if r.status_code not in (200, 201):
                 print(f"[save_match] POST {r.status_code}: {r.text[:200]}")
             return r.status_code in (200, 201)
