@@ -377,6 +377,108 @@ def _do_prediction(match: str, prog=None) -> str:
     return "ok" if saved else "fail"
 
 
+
+
+
+
+def _parse_match_texts(pre_text, post_text=""):
+    """从DeepSeek结构化输出提取比赛数据"""
+    import re
+    r = {"_warnings":[],"home_team":"","away_team":"","tournament":"","match_time":"",
+         "odds_h":None,"odds_d":None,"odds_a":None,"home_injuries":"","away_injuries":"",
+         "home_coach":"","away_coach":"","home_formation":"","away_formation":"",
+         "actual_h":None,"actual_a":None}
+    if not pre_text.strip():
+        r["_warnings"].append("pre match data empty")
+        return r
+    t = pre_text
+    # tournament
+    m = re.search(r'赛事[:\s]*(.+)', t)
+    if m:
+        v = m.group(1).strip()
+        if "2022" in v: r["tournament"] = "世界杯 2022"
+        elif "2024" in v: r["tournament"] = "欧洲杯 2024"
+        else: r["tournament"] = v
+    # kickoff time
+    m = re.search(r'开赛时间[:\s]*(\d{4}[-/]\d{2}[-/]\d{2}[\sT]\d{2}:\d{2})', t)
+    if m: r["match_time"] = m.group(1)
+    # odds
+    m = re.search(r'主胜[:\s]*(\d+\.?\d*).*?平[:\s]*(\d+\.?\d*).*?客胜[:\s]*(\d+\.?\d*)', t, re.DOTALL)
+    if not m: m = re.search(r'Home[:\s]*(\d+\.?\d*).*?Draw[:\s]*(\d+\.?\d*).*?Away[:\s]*(\d+\.?\d*)', t, re.DOTALL)
+    if m:
+        try:
+            h,d,a = float(m.group(1)),float(m.group(2)),float(m.group(3))
+            if 1.1<h<50: r["odds_h"]=h
+            if 1.1<d<50: r["odds_d"]=d
+            if 1.1<a<50: r["odds_a"]=a
+        except: pass
+    # team names
+    for line in t.split("\n"):
+        m = re.search(r'([一-鿿\w]+)\s*(?:vs|VS|vs\.|V|对)\s*([一-鿿\w]+)', line)
+        if m:
+            r["home_team"]=m.group(1).strip()
+            r["away_team"]=m.group(2).strip()
+            break
+    # injuries
+    for line in t.split("\n"):
+        ls = line.strip()
+        if "主队" in ls and ("伤病" in ls or "伤停" in ls):
+            p = ls.split(":",1)
+            if len(p)>1: r["home_injuries"] += p[-1].strip() + " "
+        elif "客队" in ls and ("伤病" in ls or "伤停" in ls):
+            p = ls.split(":",1)
+            if len(p)>1: r["away_injuries"] += p[-1].strip() + " "
+    # coaches
+    for line in t.split("\n"):
+        ls = line.strip()
+        if "主队教练" in ls or "主队主教练" in ls:
+            p = ls.split(":",1)
+            if len(p)>1: r["home_coach"] = p[-1].strip()
+        elif "客队教练" in ls or "客队主教练" in ls:
+            p = ls.split(":",1)
+            if len(p)>1: r["away_coach"] = p[-1].strip()
+    # formation
+    for line in t.split("\n"):
+        mf = re.search(r'(\d-\d-\d)', line)
+        if mf:
+            ln = line.strip()
+            if r["home_team"] and r["home_team"] in ln:
+                r["home_formation"] = mf.group(1)
+            elif r["away_team"] and r["away_team"] in ln:
+                r["away_formation"] = mf.group(1)
+    # warnings
+    if not r["home_team"]:
+        r["_warnings"].append("could not parse team names")
+    # post match
+    if post_text.strip():
+        m = re.search(r'(?:最终比分|比分)[:\s]*(\d+)\s*[-:]\s*(\d+)', post_text)
+        if m:
+            try:
+                r["actual_h"] = int(m.group(1))
+                r["actual_a"] = int(m.group(2))
+            except: pass
+    return r
+
+def _save_to_match_db(match_name, t1, t2, odds_tuple, is_ko, match_time, analysis="", triggered=None):
+    """自动将推演数据保存到比赛数据库"""
+    try:
+        from core.match_db import get_match as _gm, save_match as _sm
+        exists = _gm(match_name)
+        if exists:
+            return  # 已有则不覆盖
+        tournament = "淘汰赛" if is_ko else "小组赛"
+        odds_d = {"odds_h": odds_tuple[0], "odds_d": odds_tuple[1], "odds_a": odds_tuple[2]} if odds_tuple else {}
+        import re
+        t_match = re.search(r'(?:202[2-6])', match_time or "")
+        if t_match:
+            tournament += f" {t_match.group()}"
+        _sm({"match_name": match_name, "home_team": t1, "away_team": t2,
+             "tournament": tournament, "match_time": match_time or "",
+             **odds_d, "username": st.session_state.username})
+    except Exception:
+        pass
+
+
 # ===================================================================
 #  PREDICT TAB
 # ===================================================================
@@ -921,39 +1023,24 @@ if st.session_state.view == "match_db":
 
     tab_list, tab_add = st.tabs(["\u6bd4\u8d5b\u5217\u8868", "\u6dfb\u52a0"])
     with tab_add:
-        with st.form("new_match_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                nh = st.text_input("\u4e3b\u961f", placeholder="\u6cd5\u56fd")
-                na = st.text_input("\u5ba2\u961f", placeholder="\u585e\u5185\u52a0\u5c14")
-            with col2:
-                nt = st.selectbox("\u8d5b\u4e8b", ["", "\u4e16\u754c\u676f 2026", "\u4e16\u754c\u676f 2022", "\u6b27\u6d32\u676f 2024", "\u5176\u4ed6"], index=0)
-                nm = st.text_input("\u6bd4\u8d5b\u540d\u79f0\uff08\u7559\u7a7a\u81ea\u52a8\u751f\u6210\uff09", placeholder="\u6cd5\u56fd vs \u585e\u5185\u52a0\u5c14")
-            nc1, nc2, nc3 = st.columns(3)
-            with nc1:
-                noh = st.number_input("\u4e3b\u80dc\u8d54\u7387", value=1.0, format="%.2f", step=0.1)
-            with nc2:
-                nod = st.number_input("\u5e73\u5c40\u8d54\u7387", value=1.0, format="%.2f", step=0.1)
-            with nc3:
-                noa = st.number_input("\u5ba2\u80dc\u8d54\u7387", value=1.0, format="%.2f", step=0.1)
-            ntm = st.text_input("\u5f00\u8d5b\u65f6\u95f4", placeholder="2026-07-15 18:00+08:00")
-            nhi = st.text_area("\u4e3b\u961f\u4f24\u75c5/\u9635\u5bb9\u4fe1\u606f", height=60, placeholder="\u59c6\u5df4\u4f69\u4f24\u7f3a\uff0c\u5409\u9c81\u66ff\u8865...")
-            nai = st.text_area("\u5ba2\u961f\u4f24\u75c5/\u9635\u5bb9\u4fe1\u606f", height=60, placeholder="\u9a6c\u5185\u51fa\u6218\u6210\u7591...")
-            nres_h = st.number_input("\u5b9e\u9645\u4e3b\u961f\u8fdb\u7403\uff08\u8d5b\u540e\u586b\uff09", value=0, step=1)
-            nres_a = st.number_input("\u5b9e\u9645\u5ba2\u961f\u8fdb\u7403\uff08\u8d5b\u540e\u586b\uff09", value=0, step=1)
+        st.caption("\u5728 DeepSeek \u7f51\u9875\u7248\u7528\u63d0\u793a\u8bcd\u641c\u96c6\u4fe1\u606f\uff0c\u628a\u8fd4\u56de\u7684\u8d5b\u524d\u548c\u8d5b\u540e\u6570\u636e\u7c98\u8d34\u5230\u4e0b\u9762\uff0c\u81ea\u52a8\u63d0\u53d6")
+        pre_text = st.text_area("\u8d5b\u524d\u6570\u636e\uff08\u7c98\u8d34 DeepSeek \u8fd4\u56de\uff09", height=180, key="db_pre")
+        post_text = st.text_area("\u8d5b\u540e\u6570\u636e\uff08\u7c98\u8d34 DeepSeek \u8fd4\u56de\uff0c\u53ef\u9009\uff09", height=100, key="db_post")
 
-            if st.form_submit_button("\u4fdd\u5b58", use_container_width=True, type="primary"):
-                if not nh or not na:
-                    st.error("\u4e3b\u961f\u548c\u5ba2\u961f\u4e3a\u5fc5\u586b")
+        if st.button("\u89e3\u6790\u5e76\u4fdd\u5b58", use_container_width=True, type="primary"):
+            parsed = _parse_match_texts(pre_text, post_text)
+            if parsed.get("home_team") and parsed.get("away_team"):
+                mn = f"{parsed['home_team']} vs {parsed['away_team']}"
+                ok = save_match({**parsed, "match_name": mn, "username": st.session_state.username})
+                if ok:
+                    st.success(f"\u5df2\u4fdd\u5b58: {mn}")
+                    for w in parsed.get("_warnings", []):
+                        st.caption(f"\u26a0 {w}")
+                    st.rerun()
                 else:
-                    match_name = nm if nm else f"{nh} vs {na}"
-                    ok = save_match({"match_name":match_name,"username":st.session_state.username,
-                        "home_team":nh,"away_team":na,"tournament":nt,"match_time":ntm,
-                        "home_injuries":nhi,"away_injuries":nai,
-                        "odds_h":noh if noh>1 else None,"odds_d":nod if nod>1 else None,"odds_a":noa if noa>1 else None,
-                        "actual_h":nres_h if nres_h>0 else None,"actual_a":nres_a if nres_a>0 else None})
-                    if ok: st.success(f"\u5df2\u4fdd\u5b58: {match_name}"); st.rerun()
-                    else: st.error("\u4fdd\u5b58\u5931\u8d25\uff0c\u68c0\u67e5\u662f\u5426\u91cd\u590d")
+                    st.error("\u4fdd\u5b58\u5931\u8d25\uff0c\u68c0\u67e5\u662f\u5426\u5df2\u5b58\u5728\u540c\u540d\u6bd4\u8d5b")
+            else:
+                st.error("\u65e0\u6cd5\u89e3\u6790\u51fa\u961f\u540d\uff0c\u786e\u8ba4\u7c98\u8d34\u7684\u662f\u8d5b\u524d\u6570\u636e")
 
     with tab_list:
         if not db_matches:
