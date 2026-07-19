@@ -1093,6 +1093,12 @@ if st.session_state.view == "match_db":
                         warnings.append(f"\u672a\u80fd\u89e3\u6790\u961f\u540d: {parsed.get('home_team','?')} vs {parsed.get('away_team','?')}")
                 if ok_count > 0:
                     st.success(f"\u5df2\u4fdd\u5b58 {ok_count}/{len(parsed_list)} \u573a\u6bd4\u8d5b")
+                    for p in parsed_list:
+                        if not p.get("home_team"): continue
+                        preview = p.get("search_report","")
+                        st.markdown(f"**{p['home_team']} vs {p['away_team']}** \u2014 "
+                                    f"\u8d54\u7387 {'/'.join(str(p.get(k,'?')) for k in ['odds_h','odds_d','odds_a']) if p.get('odds_h') else '(\u65e0)'} | "
+                                    f"\u9996\u53d1 | \u4f24\u75c5 | \u6559\u7ec3\u53d1\u8a00 | \u88c1\u5224 | \u5386\u53f2\u4ea4\u950b = {len(preview)}\u5b57")
                     for w in warnings:
                         st.caption(f"\u26a0 {w}")
                     st.rerun()
@@ -1110,6 +1116,10 @@ if st.session_state.view == "match_db":
             odds_s = f"\u8d54\u7387 {m.get('odds_h','?')}/{m.get('odds_d','?')}/{m.get('odds_a','?')}" if m.get("odds_h") else ""
             res_s = f"\u5b9e\u9645 {m['actual_h']}-{m['actual_a']}" if m.get("actual_h") is not None else "\u672a\u8d5b"
             with st.expander(f"[{t}] {h} vs {a} \u2014 {res_s} {odds_s}", expanded=False):
+                st.caption(f"\u539f\u59cb\u8d5b\u524d\u6570\u636e: {len(m.get('search_report','') or '')}\u5b57 | \u539f\u59cb\u8d5b\u540e\u6570\u636e: {len(m.get('post_report','') or '')}\u5b57")
+                if m.get("search_report"):
+                    with st.expander("\u8d5b\u524d\u539f\u59cb\u6570\u636e\u9884\u89c8", expanded=False):
+                        st.text(m["search_report"][:1500] + ("..." if len(m.get("search_report","") or "") > 1500 else ""))
                 c1, c2 = st.columns(2)
                 with c1:
                     st.text_input("\u4e3b\u961f", value=h, key=f"db_h_{m['id']}")
