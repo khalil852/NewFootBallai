@@ -915,6 +915,14 @@ if st.session_state.view == "laws":
 
     if "min_score" not in st.session_state:
         st.session_state.min_score = 0.0
+    if "_laws_refresh" not in st.session_state:
+        st.session_state._laws_refresh = 0
+
+    col_r, col_f = st.columns([1, 5])
+    with col_r:
+        if st.button("🔄 刷新状态", use_container_width=True):
+            st.session_state._laws_refresh += 1
+            st.rerun()
 
     min_sc = st.slider("最低评分", 0.0, 0.5, st.session_state.min_score, 0.05,
                        help="只显示评分 >= 此值的定律", key="law_filter")
@@ -964,7 +972,7 @@ if st.session_state.view == "laws":
                 active = law.get("status", "active") == "active"
                 ns = st.toggle("🟢" if active else "🔴",
                                value=active,
-                               key=f"lt_{law['id']}")
+                               key=f"lt_{law['id']}_{st.session_state._laws_refresh}")
                 if ns != active:
                     law["status"] = "active" if ns else "inactive"
                     from core.database import save_law
