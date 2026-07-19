@@ -915,26 +915,27 @@ if st.session_state.view == "laws":
 
     if "min_score" not in st.session_state:
         st.session_state.min_score = 0.0
-    if "_laws_refresh" not in st.session_state:
-        st.session_state._laws_refresh = 0
 
     col_r, col_f = st.columns([1, 5])
     with col_r:
-        if st.button("🔄 刷新状态", use_container_width=True):
-            st.session_state._laws_refresh += 1
+        if st.button("🔄 刷新", use_container_width=True):
+            st.session_state.pop("laws", None)
             st.rerun()
+
+    # 重新加载定律（不受顶部缓存影响）
+    fresh_laws = load_laws(st.session_state.username)
 
     min_sc = st.slider("最低评分", 0.0, 0.5, st.session_state.min_score, 0.05,
                        help="只显示评分 >= 此值的定律", key="law_filter")
     st.session_state.min_score = min_sc
 
-    if not laws:
+    if not fresh_laws:
         st.info("暂无定律。赛后校准会自动添加。")
         st.stop()
 
     # 计算评分并排序
     scored = []
-    for l in laws:
+    for l in fresh_laws:
         tc = l.get("triggers_count") or 0
         cc = l.get("correct_count") or 0
         ac = cc / tc if tc > 0 else 0
@@ -970,9 +971,9 @@ if st.session_state.view == "laws":
             c1, c2, c3 = st.columns([1, 8, 1])
             with c1:
                 active = law.get("status", "active") == "active"
+                toggle_key = f"lt_{law['id']}_{st.session_state._laws_refresh}"
                 ns = st.toggle("🟢" if active else "🔴",
-                               value=active,
-                               key=f"lt_{law['id']}_{st.session_state._laws_refresh}")
+                               value=active, key=toggle_key)
                 if ns != active:
                     law["status"] = "active" if ns else "inactive"
                     from core.database import save_law
