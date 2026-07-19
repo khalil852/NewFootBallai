@@ -28,15 +28,22 @@ def get_match(match_name: str) -> dict | None:
 
 def save_match(data: dict) -> bool:
     try:
+        data = {k: v for k, v in data.items()
+                if v is not None and v != "" and not k.startswith("_")}
         existing = get_match(data.get("match_name", ""))
         if existing:
             r = _req.patch(f"{_B}/rest/v1/match_data?id=eq.{existing['id']}",
                            headers=_H, json=data, timeout=10)
+            if r.status_code not in (200, 204):
+                print(f"[save_match] PATCH {r.status_code}: {r.text[:200]}")
             return r.status_code in (200, 204)
         else:
             r = _req.post(f"{_B}/rest/v1/match_data", headers=_H, json=data, timeout=10)
+            if r.status_code not in (200, 201):
+                print(f"[save_match] POST {r.status_code}: {r.text[:200]}")
             return r.status_code in (200, 201)
-    except Exception:
+    except Exception as e:
+        print(f"[save_match] EXCEPTION: {e}")
         return False
 
 

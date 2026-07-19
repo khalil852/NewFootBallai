@@ -406,9 +406,9 @@ def _parse_match_texts(pre_text, post_text=""):
         # kickoff
         m = re.search(r'开赛时间[：:\s]*(\d{4}[-/]\d{2}[-/]\d{2}[\sT]\d{2}:\d{2})', t)
         if m: r["match_time"] = m.group(1)
-        # odds
-        m = re.search(r'主胜[：:\s]*(\d+\.?\d*).*?平[局]?[：:\s]*(\d+\.?\d*).*?客胜[：:\s]*(\d+\.?\d*)', t, re.DOTALL)
-        if not m: m = re.search(r'Home[：:\s]*(\d+\.?\d*).*?Draw[：:\s]*(\d+\.?\d*).*?Away[：:\s]*(\d+\.?\d*)', t, re.DOTALL)
+        # odds — 兼容 "主胜 2.02"、"主胜 (西班牙) 2.02"、"主胜: 2.02"、"Home 2.02"
+        m = re.search(r'主胜[^0-9]*(\d+\.?\d*).*?平[^0-9]*(\d+\.?\d*).*?客胜[^0-9]*(\d+\.?\d*)', t, re.DOTALL)
+        if not m: m = re.search(r'Home[^0-9]*(\d+\.?\d*).*?Draw[^0-9]*(\d+\.?\d*).*?Away[^0-9]*(\d+\.?\d*)', t, re.DOTALL)
         if m:
             try:
                 h,d,a = float(m.group(1)),float(m.group(2)),float(m.group(3))
@@ -416,10 +416,11 @@ def _parse_match_texts(pre_text, post_text=""):
                 if 1.1<d<50: r["odds_d"]=d
                 if 1.1<a<50: r["odds_a"]=a
             except: pass
-        # team names — 支持中英文混合
+        # team names — 支持 "西班牙 vs 阿根廷" 或 "### 西班牙 vs 阿根廷"
         lines = t.split("\n")
         for i, line in enumerate(lines):
-            m = re.search(r'(.+?)\s*(?:vs|VS|vs\.|V|对)\s*(.+)', line)
+            clean = line.lstrip("#").strip()
+            m = re.search(r'(.+?)\s*(?:vs|VS|vs\.|V|对)\s*(.+)', clean)
             if m:
                 r["home_team"]=m.group(1).strip(); r["away_team"]=m.group(2).strip()
                 break
@@ -439,21 +440,23 @@ def _parse_match_texts(pre_text, post_text=""):
                 elif "客队" in ls or (r["away_team"] and r["away_team"] in ls):
                     p = ls.split(":",1)
                     if len(p)>1: r["away_injuries"] += p[-1].strip() + " "
-        # coaches — 支持 "### 主队信息" → "教练: xxx" 格式
+        # coaches — 支持 "### 主队信息" / "### 教练发言 / **主队教练:**" 格式
         current_section = ""
         for line in lines:
             ls = line.strip()
-            if "主队信息" in ls or "主队教练" in ls or "主队主教练" in ls:
+            if "主队信息" in ls or "主队教练" in ls or "主队主教练" in ls or "**主队教练" in ls:
                 current_section = "home"
-            elif "客队信息" in ls or "客队教练" in ls or "客队主教练" in ls:
+            elif "客队信息" in ls or "客队教练" in ls or "客队主教练" in ls or "**客队教练" in ls:
                 current_section = "away"
             elif "教练" in ls and ":" in ls:
                 p = ls.split(":",1)
                 coach = p[-1].strip()
                 if coach:
-                    if current_section == "home": r["home_coach"] = coach
-                    elif current_section == "away": r["away_coach"] = coach
-        # formation
+                    if current_section == "home" or "主队" in ls:
+                        r["home_coach"] = coach
+                    elif current_section == "away" or "客队" in ls:
+                        r["away_coach"] = coach
+        # formation — 支持 "主队 (4-2-3-1):"、"**客队 (4-1-3-2):**"、"阵型: 4-3-3"
         for line in lines:
             mf = re.search(r'(\d-\d-\d)', line)
             if mf:
@@ -462,6 +465,12 @@ def _parse_match_texts(pre_text, post_text=""):
                     r["home_formation"] = mf.group(1)
                 elif "客队" in ln or (r["away_team"] and r["away_team"] in ln):
                     r["away_formation"] = mf.group(1)
+                elif "阵型" in ln and ":" in ln:
+                    side = ln.split(":")[0]
+                    if r["home_team"] and r["home_team"] in side:
+                        r["home_formation"] = mf.group(1)
+                    elif r["away_team"] and r["away_team"] in side:
+                        r["away_formation"] = mf.group(1)
         if not r["home_team"]:
             r["_warnings"].append("could not parse team names")
         return r
