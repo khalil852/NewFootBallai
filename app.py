@@ -971,7 +971,7 @@ if st.session_state.view == "laws":
             c1, c2, c3 = st.columns([1, 8, 1])
             with c1:
                 active = law.get("status", "active") == "active"
-                toggle_key = f"lt_{law['id']}_{st.session_state._laws_refresh}"
+                toggle_key = f"lt_{law['id']}"
                 ns = st.toggle("🟢" if active else "🔴",
                                value=active, key=toggle_key)
                 if ns != active:
