@@ -1043,7 +1043,9 @@ if st.session_state.view == "match_db":
             if m.get("search_report"):
                 with st.expander("赛前原始数据", expanded=False):
                     st.text(m["search_report"][:2000])
-            post_in = st.text_area("赛后数据补充", height=80, key=f"post_{m['id']}")
+            post_in = st.text_area("赛后数据补充", height=80,
+                                     value=m.get("post_report") or "",
+                                     key=f"post_{m['id']}")
             c1,c2 = st.columns(2)
             with c1:
                 if st.button("保存赛后", key=f"sp_{m['id']}"):
