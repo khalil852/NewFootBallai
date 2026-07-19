@@ -1048,8 +1048,7 @@ if st.session_state.view == "match_db":
                     st.success(f"已保存 {ok_count}/{len(parsed_list)} 场比赛")
                     for p in parsed_list:
                         if p.get("home_team"):
-                            st.info(f"**{p['home_team']} vs {p['away_team']}** - 赛前{len(p.get('search_report',''))}字 赛后{len(p.get('post_report',''))}字")
+                            st.info(f"**{p['home_team']} vs {p['away_team']}** — {len(p.get('search_report',''))}字")
                     st.rerun()
                 else:
-                    st.error("保存失败，检查是否已有同名比赛")
-                    st.stop()
+                    st.error("保存失败，检查数据或同名比赛")
