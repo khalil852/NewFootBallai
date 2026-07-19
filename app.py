@@ -1072,7 +1072,11 @@ if st.session_state.view == "match_db":
                 for parsed in parsed_list:
                     if parsed.get("home_team") and parsed.get("away_team"):
                         mn = f"{parsed['home_team']} vs {parsed['away_team']}"
-                        ok = save_match({**parsed, "match_name": mn, "username": st.session_state.username})
+                        # 去掉内部字段
+                        save_data = {k:v for k,v in parsed.items() if not k.startswith("_")}
+                        save_data["match_name"] = mn
+                        save_data["username"] = st.session_state.username
+                        ok = save_match(save_data)
                         if ok:
                             ok_count += 1
                             warnings.extend(parsed.get("_warnings", []))
