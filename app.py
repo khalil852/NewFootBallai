@@ -907,7 +907,7 @@ if st.session_state.view == "laws":
 #  MATCH DB TAB
 # ===================================================================
 if st.session_state.view == "match_db":
-    st.markdown("#### \ud83d\udccb \u6bd4\u8d5b\u6570\u636e\u5e93")
+    st.markdown("#### \u6bd4\u8d5b\u6570\u636e\u5e93")
     from core.match_db import list_matches, delete_match, save_match
     db_matches = list_matches(st.session_state.username)
 
@@ -919,7 +919,7 @@ if st.session_state.view == "match_db":
     tournaments = sorted(tournaments)
     selected_tournament = st.selectbox("\u7b5b\u9009\u8d5b\u4e8b", ["\u5168\u90e8"] + tournaments, key="db_filter")
 
-    tab_list, tab_add = st.tabs(["\ud83d\udcd6 \u6bd4\u8d5b\u5217\u8868", "\u2795 \u6dfb\u52a0"])
+    tab_list, tab_add = st.tabs(["\u6bd4\u8d5b\u5217\u8868", "\u6dfb\u52a0"])
     with tab_add:
         with st.form("new_match_form"):
             col1, col2 = st.columns(2)
@@ -942,7 +942,7 @@ if st.session_state.view == "match_db":
             nres_h = st.number_input("\u5b9e\u9645\u4e3b\u961f\u8fdb\u7403\uff08\u8d5b\u540e\u586b\uff09", value=0, step=1)
             nres_a = st.number_input("\u5b9e\u9645\u5ba2\u961f\u8fdb\u7403\uff08\u8d5b\u540e\u586b\uff09", value=0, step=1)
 
-            if st.form_submit_button("\ud83d\udcbe \u4fdd\u5b58", use_container_width=True, type="primary"):
+            if st.form_submit_button("\u4fdd\u5b58", use_container_width=True, type="primary"):
                 if not nh or not na:
                     st.error("\u4e3b\u961f\u548c\u5ba2\u961f\u4e3a\u5fc5\u586b")
                 else:
@@ -977,7 +977,7 @@ if st.session_state.view == "match_db":
                     st.text_input("\u5ba2\u961f\u4f24\u75c5", value=m.get("away_injuries",""), key=f"db_ai_{m['id']}")
                     st.number_input("\u5e73\u5c40\u8d54\u7387", value=float(m.get("odds_d") or 1.0), step=0.1, format="%.2f", key=f"db_od_{m['id']}")
                     st.number_input("\u5ba2\u80dc\u8d54\u7387", value=float(m.get("odds_a") or 1.0), step=0.1, format="%.2f", key=f"db_oa_{m['id']}")
-                if st.button("\ud83d\udcbe \u4fdd\u5b58", key=f"db_save_{m['id']}"):
+                if st.button("\u4fdd\u5b58", key=f"db_save_{m['id']}"):
                     save_match({"match_name":m["match_name"],"home_team":st.session_state[f"db_h_{m['id']}"],
                         "away_team":st.session_state[f"db_a_{m['id']}"],"home_injuries":st.session_state[f"db_hi_{m['id']}"],
                         "away_injuries":st.session_state[f"db_ai_{m['id']}"],"tournament":m.get("tournament",""),
@@ -985,5 +985,5 @@ if st.session_state.view == "match_db":
                         "odds_a":st.session_state[f"db_oa_{m['id']}"],"actual_h":st.session_state[f"db_ah_{m['id']}"],
                         "actual_a":st.session_state[f"db_aa_{m['id']}"],"username":st.session_state.username})
                     st.success("OK"); st.rerun()
-                if st.button("\ud83d\uddd1\ufe0f \u5220\u9664", key=f"db_del_{m['id']}"):
+                if st.button("\u5220\u9664", key=f"db_del_{m['id']}"):
                     delete_match(m["id"]); st.rerun()
