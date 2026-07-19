@@ -443,16 +443,7 @@ def calibrate_record(record: dict, laws: list[dict],
 
         for item in items:
             if not isinstance(item, dict):
-                # 可能是降级ID列表
-                if isinstance(item, str) and len(item) > 2:
-                    degraded_laws.append(item)
-                    try:
-                        _req.patch(f"{SUPABASE_URL.rstrip('/')}/rest/v1/laws?id=eq.{item}",
-                                   headers={"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}",
-                                            "Content-Type":"application/json"},
-                                   json={"status":"inactive"}, timeout=10)
-                        st.toast(f"📉 降级: {item}", icon="📉")
-                    except Exception: pass
+                # 忽略降级建议 — LLM 没有足够信息判断一条定律好坏
                 continue
 
             has_id = bool(item.get("id"))
