@@ -1045,10 +1045,10 @@ if st.session_state.view == "match_db":
                         else:
                             st.warning(f"保存失败: {mn}")
                 if ok_count > 0:
-                    st.success(f"已保存 {ok_count}/{len(parsed_list)} 场比赛")
+                    st.success(f"✅ 已保存 {ok_count}/{len(parsed_list)} 场")
                     for p in parsed_list:
                         if p.get("home_team"):
                             st.info(f"**{p['home_team']} vs {p['away_team']}** — {len(p.get('search_report',''))}字")
-                    st.rerun()
+                    st.info("切换到「比赛列表」标签查看")
                 else:
                     st.error("保存失败，检查数据或同名比赛")
