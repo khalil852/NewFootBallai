@@ -297,7 +297,7 @@ def _do_prediction(match: str, prog=None) -> str:
         st.session_state._last_error = f"⚠ 🔍 没有结果 {quant_error} {qual_error}"
         return "skip"
 
-        from core.config import MODEL_FAST, MODEL_PRO
+    from core.config import MODEL_FAST, MODEL_PRO
     sr = _deepseek_chat(PROMPT_SEARCH,
         f"为 {match} 搜集赛前信息并输出结构化数据。\n定量数据(赔率等):\n{quant_data}\n\n定性数据(伤病/阵容):\n{qual_data}",
         DEEPSEEK_KEY, MODEL_FAST, fallback_cfgs=[MODEL_PRO])
