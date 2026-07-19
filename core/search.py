@@ -192,11 +192,15 @@ def search_qualitative(match_query: str) -> str:
 
 
 def search_post_match(match_query: str) -> str:
-    # 查手动数据库，有实际比分直接返回
+    # 查手动数据库，有原始赛后文本优先
     try:
         from core.match_db import get_match as _gm
         m = _gm(match_query)
-        if m and m.get("actual_h") is not None and m.get("actual_a") is not None:
+        if not m:
+            en_home, en_away = _team_names(match_query)
+        elif m.get("post_report"):
+            return m["post_report"]
+        elif m.get("actual_h") is not None and m.get("actual_a") is not None:
             return f"最终比分: {m.get('home_team','主')} {m['actual_h']}-{m['actual_a']} {m.get('away_team','客')}"
     except Exception:
         pass

@@ -392,7 +392,7 @@ def _parse_match_texts(pre_text, post_text=""):
         r = {"_warnings":[],"home_team":"","away_team":"","tournament":"","match_time":"",
              "odds_h":None,"odds_d":None,"odds_a":None,"home_injuries":"","away_injuries":"",
              "home_coach":"","away_coach":"","home_formation":"","away_formation":"",
-             "actual_h":None,"actual_a":None,"search_report":text.strip()}
+             "actual_h":None,"actual_a":None,"search_report":text.strip(),"post_report":""}
         if not text.strip():
             return None
         t = text
@@ -483,7 +483,10 @@ def _parse_match_texts(pre_text, post_text=""):
         post_blocks = re.split(r'\n\s*---+\s*\n|\n{3,}', post_text.strip())
         for i, pr in enumerate(results):
             if i < len(post_blocks):
-                m = re.search(r'(?:最终比分|比分)[：:\s]*(\d+)\s*[-:]\s*(\d+)', post_blocks[i])
+                raw = post_blocks[i].strip()
+                if raw:
+                    pr["post_report"] = raw
+                m = re.search(r'(?:最终比分|比分)[：:\s]*(\d+)\s*[-:]\s*(\d+)', raw)
                 if m:
                     try:
                         pr["actual_h"] = int(m.group(1))
