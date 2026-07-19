@@ -125,12 +125,17 @@ def _match_db_odds(match_query: str) -> str | None:
 
 
 def _match_db_report(match_query: str) -> str | None:
-    """查手动数据库，有信息则返回赛前报告"""
+    """查手动数据库，有原始search_report直接返回，没有则拼装"""
     try:
         from core.match_db import get_match as _gm
         m = _gm(match_query)
         if not m:
             return None
+        # 原始粘贴文本优先
+        raw = m.get("search_report")
+        if raw and len(raw.strip()) > 20:
+            return raw.strip()
+        # 回退拼装
         lines = []
         if m.get("home_team") and m.get("away_team"):
             lines.append(f"### {match_query}")
