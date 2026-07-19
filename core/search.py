@@ -108,56 +108,53 @@ def _football(kw: str) -> str:
     return kw + _SPORT
 
 
-def _match_db_odds(match_query: str) -> str | None:
-    """查手动数据库，有赔率则返回格式化文本"""
+def _db_find(query: str) -> dict | None:
+    """用 LLM 在 match_db 里模糊搜索匹配的比赛"""
     try:
-        from core.match_db import get_match as _gm
-        m = _gm(match_query)
-        if m and m.get("odds_h") and m.get("odds_d") and m.get("odds_a"):
-            oh, od, oa = m["odds_h"], m["odds_d"], m["odds_a"]
-            txt = f"赔率: 主胜 {oh} | 平局 {od} | 客胜 {oa}"
-            if m.get("tournament"):
-                txt = f"[{m['tournament']}] {txt}"
-            return txt
+        from core.match_db import list_matches as _lm
+        all_matches = _lm(st.session_state.username)
+        if not all_matches:
+            return None
+        names = [m["match_name"] for m in all_matches if m.get("match_name")]
+        if not names:
+            return None
+        # 先精确/子串匹配
+        q = query.lower().replace("vs", "").replace(" ", "").replace("对", "")
+        for m in all_matches:
+            mn = m.get("match_name", "").lower().replace("vs", "").replace(" ", "").replace("对", "")
+            if q == mn or q in mn or mn in q:
+                return m
+        # LLM 模糊匹配
+        from core.config import MODEL_FAST
+        prompt = f"""从列表中找到与 "{query}" 最匹配的比赛。只输出 match_name，找不到输出 NONE。
+列表:\n""" + "\n".join(f"- {n}" for n in names)
+        ans = _deepseek_chat("", prompt, "", MODEL_FAST).strip()
+        if ans and ans != "NONE":
+            for m in all_matches:
+                if m.get("match_name") == ans:
+                    return m
     except Exception:
         pass
     return None
 
 
-def _match_db_report(match_query: str) -> str | None:
-    """查手动数据库，有原始search_report直接返回，没有则拼装"""
+def _match_db_odds(match_query: str) -> str | None:
     try:
-        from core.match_db import get_match as _gm
-        m = _gm(match_query)
-        if not m:
-            return None
-        # 原始粘贴文本优先
+        m = _db_find(match_query)
+        if m and m.get("odds_h") and m.get("odds_d") and m.get("odds_a"):
+            return f"赔率: {m['odds_h']}/{m['odds_d']}/{m['odds_a']}" + (f" [{m['tournament']}]" if m.get("tournament") else "")
+    except Exception: pass
+    return None
+
+
+def _match_db_report(match_query: str) -> str | None:
+    try:
+        m = _db_find(match_query)
+        if not m: return None
         raw = m.get("search_report")
-        if raw and len(raw.strip()) > 20:
-            return raw.strip()
-        # 回退拼装
-        lines = []
-        if m.get("home_team") and m.get("away_team"):
-            lines.append(f"### {match_query}")
-        if m.get("tournament"):
-            lines.append(f"赛事: {m['tournament']}")
-        if m.get("home_injuries"):
-            lines.append(f"**{m['home_team']}伤病:** {m['home_injuries']}")
-        if m.get("away_injuries"):
-            lines.append(f"**{m['away_team']}伤病:** {m['away_injuries']}")
-        if m.get("home_coach"):
-            lines.append(f"**{m['home_team']}教练:** {m['home_coach']}")
-        if m.get("away_coach"):
-            lines.append(f"**{m['away_team']}教练:** {m['away_coach']}")
-        if m.get("home_formation"):
-            lines.append(f"**{m['home_team']}阵型:** {m['home_formation']}")
-        if m.get("away_formation"):
-            lines.append(f"**{m['away_team']}阵型:** {m['away_formation']}")
-        if m.get("match_time"):
-            lines.append(f"开赛时间: {m['match_time']}")
-        return "\n".join(lines)
-    except Exception:
-        pass
+        if raw and len(raw.strip()) > 20: return raw.strip()
+        return None
+    except Exception: pass
     return None
 
 
@@ -192,18 +189,12 @@ def search_qualitative(match_query: str) -> str:
 
 
 def search_post_match(match_query: str) -> str:
-    # 查手动数据库，有原始赛后文本优先
-    try:
-        from core.match_db import get_match as _gm
-        m = _gm(match_query)
-        if not m:
-            en_home, en_away = _team_names(match_query)
-        elif m.get("post_report"):
+    m = _db_find(match_query)
+    if m:
+        if m.get("post_report"):
             return m["post_report"]
-        elif m.get("actual_h") is not None and m.get("actual_a") is not None:
+        if m.get("actual_h") is not None and m.get("actual_a") is not None:
             return f"最终比分: {m.get('home_team','主')} {m['actual_h']}-{m['actual_a']} {m.get('away_team','客')}"
-    except Exception:
-        pass
     en_home, en_away = _team_names(match_query)
     rounds = [
         _football(f"{en_home} {en_away} final score result match report"),
