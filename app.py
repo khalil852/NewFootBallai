@@ -270,38 +270,34 @@ def _do_prediction(match: str, prog=None) -> str:
 
     laws = load_laws(st.session_state.username)
 
-    from core.match_db import get_match
-    manual = get_match(match)
+    from core.match_db import get_match as _gm
     manual_odds = None
-    manual_home = manual_away = ""
-    if manual:
-        oh = manual.get("odds_h"); od = manual.get("odds_d"); oa = manual.get("odds_a")
-        if oh and od and oa:
-            manual_odds = (oh, od, oa)
-        manual_home = manual.get("home_team", "")
-        manual_away = manual.get("away_team", "")
+    try:
+        _manual = _gm(match)
+        if _manual:
+            oh = _manual.get("odds_h"); od = _manual.get("odds_d"); oa = _manual.get("odds_a")
+            if oh and od and oa:
+                manual_odds = (oh, od, oa)
+    except Exception:
+        pass
 
-    if prog: prog.progress(0, text=f"⏳ {match} 搜索中...")
+    if prog: prog.progress(0, text=f"⏳ {match} 🔍")
     quant_error = qual_error = ""
     try:
         quant_data = search_quantitative(match)
     except Exception as e:
-        quant_error = str(e)[:80]
-        quant_data = ""
+        quant_error = str(e)[:80]; quant_data = ""
     try:
         qual_data = search_qualitative(match)
     except Exception as e:
-        qual_error = str(e)[:80]
-        qual_data = ""
+        qual_error = str(e)[:80]; qual_data = ""
 
     combined = quant_data + "\n" + qual_data
-    if not combined.strip():
-        detail = f"定量:{quant_error}" if quant_error else ""
-        detail += f" 定性:{qual_error}" if qual_error else ""
-        st.session_state._last_error = f"⚠️ Tavily 搜索未返回结果 {detail}"
+    if not combined.strip() and not manual_odds:
+        st.session_state._last_error = f"⚠ 🔍 没有结果 {quant_error} {qual_error}"
         return "skip"
 
-    from core.config import MODEL_FAST, MODEL_PRO
+        from core.config import MODEL_FAST, MODEL_PRO
     sr = _deepseek_chat(PROMPT_SEARCH,
         f"为 {match} 搜集赛前信息并输出结构化数据。\n定量数据(赔率等):\n{quant_data}\n\n定性数据(伤病/阵容):\n{qual_data}",
         DEEPSEEK_KEY, MODEL_FAST, fallback_cfgs=[MODEL_PRO])

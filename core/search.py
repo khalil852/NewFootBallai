@@ -105,11 +105,61 @@ _SPORT = " football match soccer World Cup European Championship "
 
 
 def _football(kw: str) -> str:
-    """给搜索词加上足球限定，避免搜到排球/篮球"""
     return kw + _SPORT
 
 
+def _match_db_odds(match_query: str) -> str | None:
+    """查手动数据库，有赔率则返回格式化文本"""
+    try:
+        from core.match_db import get_match as _gm
+        m = _gm(match_query)
+        if m and m.get("odds_h") and m.get("odds_d") and m.get("odds_a"):
+            oh, od, oa = m["odds_h"], m["odds_d"], m["odds_a"]
+            txt = f"赔率: 主胜 {oh} | 平局 {od} | 客胜 {oa}"
+            if m.get("tournament"):
+                txt = f"[{m['tournament']}] {txt}"
+            return txt
+    except Exception:
+        pass
+    return None
+
+
+def _match_db_report(match_query: str) -> str | None:
+    """查手动数据库，有信息则返回赛前报告"""
+    try:
+        from core.match_db import get_match as _gm
+        m = _gm(match_query)
+        if not m:
+            return None
+        lines = []
+        if m.get("home_team") and m.get("away_team"):
+            lines.append(f"### {match_query}")
+        if m.get("tournament"):
+            lines.append(f"赛事: {m['tournament']}")
+        if m.get("home_injuries"):
+            lines.append(f"**{m['home_team']}伤病:** {m['home_injuries']}")
+        if m.get("away_injuries"):
+            lines.append(f"**{m['away_team']}伤病:** {m['away_injuries']}")
+        if m.get("home_coach"):
+            lines.append(f"**{m['home_team']}教练:** {m['home_coach']}")
+        if m.get("away_coach"):
+            lines.append(f"**{m['away_team']}教练:** {m['away_coach']}")
+        if m.get("home_formation"):
+            lines.append(f"**{m['home_team']}阵型:** {m['home_formation']}")
+        if m.get("away_formation"):
+            lines.append(f"**{m['away_team']}阵型:** {m['away_formation']}")
+        if m.get("match_time"):
+            lines.append(f"开赛时间: {m['match_time']}")
+        return "\n".join(lines)
+    except Exception:
+        pass
+    return None
+
+
 def search_quantitative(match_query: str) -> str:
+    db = _match_db_odds(match_query)
+    if db:
+        return db
     en_home, en_away = _team_names(match_query)
     rounds = [
         _football(f"{en_home} {en_away} match odds 1X2 over under"),
@@ -120,6 +170,9 @@ def search_quantitative(match_query: str) -> str:
 
 
 def search_qualitative(match_query: str) -> str:
+    db = _match_db_report(match_query)
+    if db:
+        return db
     en_home, en_away = _team_names(match_query)
     rounds = [
         _football(f"{en_home} {en_away} injury news squad latest"),
@@ -134,6 +187,14 @@ def search_qualitative(match_query: str) -> str:
 
 
 def search_post_match(match_query: str) -> str:
+    # 查手动数据库，有实际比分直接返回
+    try:
+        from core.match_db import get_match as _gm
+        m = _gm(match_query)
+        if m and m.get("actual_h") is not None and m.get("actual_a") is not None:
+            return f"最终比分: {m.get('home_team','主')} {m['actual_h']}-{m['actual_a']} {m.get('away_team','客')}"
+    except Exception:
+        pass
     en_home, en_away = _team_names(match_query)
     rounds = [
         _football(f"{en_home} {en_away} final score result match report"),
