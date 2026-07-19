@@ -907,36 +907,83 @@ if st.session_state.view == "laws":
 #  MATCH DB TAB
 # ===================================================================
 if st.session_state.view == "match_db":
-    st.markdown("#### \u7b14\u8bb0 \u6bd4\u8d5b\u6570\u636e\u5e93")
-    st.info("\u5728 Supabase Dashboard \u2192 SQL Editor \u6267\u884c create_match_data.sql \u521b\u5efa\u8868")
+    st.markdown("#### \ud83d\udccb \u6bd4\u8d5b\u6570\u636e\u5e93")
     from core.match_db import list_matches, delete_match, save_match
     db_matches = list_matches(st.session_state.username)
-    if not db_matches:
-        st.info("\u6682\u65e0\u624b\u52a8\u5f55\u5165\u7684\u6570\u636e\u3002")
 
+    # \u6309\u8d5b\u4e8b\u5206\u7c7b
+    tournaments = set()
     for m in db_matches:
-        h = m.get("home_team","?"); a = m.get("away_team","?")
-        odds_s = f"\u8d54\u7387{m.get('odds_h','?')}/{m.get('odds_d','?')}/{m.get('odds_a','?')}" if m.get("odds_h") else ""
-        res_s = f"\u5b9e\u9645 {m['actual_h']}-{m['actual_a']}" if m.get("actual_h") is not None else "\u672a\u8d5b"
-        with st.expander(f"{h} vs {a} - {res_s} {odds_s}", expanded=False):
-            c1, c2 = st.columns(2)
-            with c1:
-                st.text_input("\u4e3b\u961f", value=h, key=f"db_h_{m['id']}")
-                st.text_input("\u4e3b\u961f\u4f24\u75c5", value=m.get("home_injuries",""), key=f"db_hi_{m['id']}")
-                st.number_input("\u4e3b\u80dc\u8d54\u7387", value=float(m.get("odds_h") or 1.0), step=0.1, format="%.2f", key=f"db_oh_{m['id']}")
-                st.number_input("\u5b9e\u9645\u4e3b\u961f\u8fdb\u7403", value=int(m.get("actual_h") or 0) if m.get("actual_h") is not None else 0, key=f"db_ah_{m['id']}")
-            with c2:
-                st.text_input("\u5ba2\u961f", value=a, key=f"db_a_{m['id']}")
-                st.text_input("\u5ba2\u961f\u4f24\u75c5", value=m.get("away_injuries",""), key=f"db_ai_{m['id']}")
-                st.number_input("\u5e73\u5c40\u8d54\u7387", value=float(m.get("odds_d") or 1.0), step=0.1, format="%.2f", key=f"db_od_{m['id']}")
-                st.number_input("\u5ba2\u80dc\u8d54\u7387", value=float(m.get("odds_a") or 1.0), step=0.1, format="%.2f", key=f"db_oa_{m['id']}")
-            if st.button("\u4fdd\u5b58", key=f"db_save_{m['id']}"):
-                save_match({"match_name":m["match_name"],"home_team":st.session_state[f"db_h_{m['id']}"],
-                    "away_team":st.session_state[f"db_a_{m['id']}"],"home_injuries":st.session_state[f"db_hi_{m['id']}"],
-                    "away_injuries":st.session_state[f"db_ai_{m['id']}"],
-                    "odds_h":st.session_state[f"db_oh_{m['id']}"],"odds_d":st.session_state[f"db_od_{m['id']}"],
-                    "odds_a":st.session_state[f"db_oa_{m['id']}"],"actual_h":st.session_state[f"db_ah_{m['id']}"],
-                    "actual_a":st.session_state[f"db_aa_{m['id']}"],"username":st.session_state.username})
-                st.success("OK"); st.rerun()
-            if st.button("\u5220\u9664", key=f"db_del_{m['id']}"):
-                delete_match(m["id"]); st.rerun()
+        t = m.get("tournament", "") or "\u672a\u5206\u7c7b"
+        tournaments.add(t)
+    tournaments = sorted(tournaments)
+    selected_tournament = st.selectbox("\u7b5b\u9009\u8d5b\u4e8b", ["\u5168\u90e8"] + tournaments, key="db_filter")
+
+    tab_list, tab_add = st.tabs(["\ud83d\udcd6 \u6bd4\u8d5b\u5217\u8868", "\u2795 \u6dfb\u52a0"])
+    with tab_add:
+        with st.form("new_match_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                nh = st.text_input("\u4e3b\u961f", placeholder="\u6cd5\u56fd")
+                na = st.text_input("\u5ba2\u961f", placeholder="\u585e\u5185\u52a0\u5c14")
+            with col2:
+                nt = st.selectbox("\u8d5b\u4e8b", ["", "\u4e16\u754c\u676f 2026", "\u4e16\u754c\u676f 2022", "\u6b27\u6d32\u676f 2024", "\u5176\u4ed6"], index=0)
+                nm = st.text_input("\u6bd4\u8d5b\u540d\u79f0\uff08\u7559\u7a7a\u81ea\u52a8\u751f\u6210\uff09", placeholder="\u6cd5\u56fd vs \u585e\u5185\u52a0\u5c14")
+            nc1, nc2, nc3 = st.columns(3)
+            with nc1:
+                noh = st.number_input("\u4e3b\u80dc\u8d54\u7387", value=1.0, format="%.2f", step=0.1)
+            with nc2:
+                nod = st.number_input("\u5e73\u5c40\u8d54\u7387", value=1.0, format="%.2f", step=0.1)
+            with nc3:
+                noa = st.number_input("\u5ba2\u80dc\u8d54\u7387", value=1.0, format="%.2f", step=0.1)
+            ntm = st.text_input("\u5f00\u8d5b\u65f6\u95f4", placeholder="2026-07-15 18:00+08:00")
+            nhi = st.text_area("\u4e3b\u961f\u4f24\u75c5/\u9635\u5bb9\u4fe1\u606f", height=60, placeholder="\u59c6\u5df4\u4f69\u4f24\u7f3a\uff0c\u5409\u9c81\u66ff\u8865...")
+            nai = st.text_area("\u5ba2\u961f\u4f24\u75c5/\u9635\u5bb9\u4fe1\u606f", height=60, placeholder="\u9a6c\u5185\u51fa\u6218\u6210\u7591...")
+            nres_h = st.number_input("\u5b9e\u9645\u4e3b\u961f\u8fdb\u7403\uff08\u8d5b\u540e\u586b\uff09", value=0, step=1)
+            nres_a = st.number_input("\u5b9e\u9645\u5ba2\u961f\u8fdb\u7403\uff08\u8d5b\u540e\u586b\uff09", value=0, step=1)
+
+            if st.form_submit_button("\ud83d\udcbe \u4fdd\u5b58", use_container_width=True, type="primary"):
+                if not nh or not na:
+                    st.error("\u4e3b\u961f\u548c\u5ba2\u961f\u4e3a\u5fc5\u586b")
+                else:
+                    match_name = nm if nm else f"{nh} vs {na}"
+                    ok = save_match({"match_name":match_name,"username":st.session_state.username,
+                        "home_team":nh,"away_team":na,"tournament":nt,"match_time":ntm,
+                        "home_injuries":nhi,"away_injuries":nai,
+                        "odds_h":noh if noh>1 else None,"odds_d":nod if nod>1 else None,"odds_a":noa if noa>1 else None,
+                        "actual_h":nres_h if nres_h>0 else None,"actual_a":nres_a if nres_a>0 else None})
+                    if ok: st.success(f"\u5df2\u4fdd\u5b58: {match_name}"); st.rerun()
+                    else: st.error("\u4fdd\u5b58\u5931\u8d25\uff0c\u68c0\u67e5\u662f\u5426\u91cd\u590d")
+
+    with tab_list:
+        if not db_matches:
+            st.info("\u6682\u65e0\u6570\u636e\uff0c\u5207\u6362\u5230\u300c\u6dfb\u52a0\u300d\u6807\u7b7e\u5f55\u5165\u6bd4\u8d5b\u4fe1\u606f")
+        for m in db_matches:
+            t = m.get("tournament", "") or "\u672a\u5206\u7c7b"
+            if selected_tournament != "\u5168\u90e8" and t != selected_tournament:
+                continue
+            h = m.get("home_team","?"); a = m.get("away_team","?")
+            odds_s = f"\u8d54\u7387 {m.get('odds_h','?')}/{m.get('odds_d','?')}/{m.get('odds_a','?')}" if m.get("odds_h") else ""
+            res_s = f"\u5b9e\u9645 {m['actual_h']}-{m['actual_a']}" if m.get("actual_h") is not None else "\u672a\u8d5b"
+            with st.expander(f"[{t}] {h} vs {a} \u2014 {res_s} {odds_s}", expanded=False):
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.text_input("\u4e3b\u961f", value=h, key=f"db_h_{m['id']}")
+                    st.text_input("\u4e3b\u961f\u4f24\u75c5", value=m.get("home_injuries",""), key=f"db_hi_{m['id']}")
+                    st.number_input("\u4e3b\u80dc\u8d54\u7387", value=float(m.get("odds_h") or 1.0), step=0.1, format="%.2f", key=f"db_oh_{m['id']}")
+                    st.number_input("\u5b9e\u9645\u4e3b\u961f\u8fdb\u7403", value=int(m.get("actual_h") or 0) if m.get("actual_h") is not None else 0, key=f"db_ah_{m['id']}")
+                with c2:
+                    st.text_input("\u5ba2\u961f", value=a, key=f"db_a_{m['id']}")
+                    st.text_input("\u5ba2\u961f\u4f24\u75c5", value=m.get("away_injuries",""), key=f"db_ai_{m['id']}")
+                    st.number_input("\u5e73\u5c40\u8d54\u7387", value=float(m.get("odds_d") or 1.0), step=0.1, format="%.2f", key=f"db_od_{m['id']}")
+                    st.number_input("\u5ba2\u80dc\u8d54\u7387", value=float(m.get("odds_a") or 1.0), step=0.1, format="%.2f", key=f"db_oa_{m['id']}")
+                if st.button("\ud83d\udcbe \u4fdd\u5b58", key=f"db_save_{m['id']}"):
+                    save_match({"match_name":m["match_name"],"home_team":st.session_state[f"db_h_{m['id']}"],
+                        "away_team":st.session_state[f"db_a_{m['id']}"],"home_injuries":st.session_state[f"db_hi_{m['id']}"],
+                        "away_injuries":st.session_state[f"db_ai_{m['id']}"],"tournament":m.get("tournament",""),
+                        "odds_h":st.session_state[f"db_oh_{m['id']}"],"odds_d":st.session_state[f"db_od_{m['id']}"],
+                        "odds_a":st.session_state[f"db_oa_{m['id']}"],"actual_h":st.session_state[f"db_ah_{m['id']}"],
+                        "actual_a":st.session_state[f"db_aa_{m['id']}"],"username":st.session_state.username})
+                    st.success("OK"); st.rerun()
+                if st.button("\ud83d\uddd1\ufe0f \u5220\u9664", key=f"db_del_{m['id']}"):
+                    delete_match(m["id"]); st.rerun()
