@@ -240,22 +240,23 @@ if st.sidebar.button("🚪 登出", use_container_width=True):
     logout()
 
 # ── Main Header ──
-c_pred, c_hist, c_laws = st.columns(3)
-with c_pred:
+c1, c2, c3, c4 = st.columns(4)
+with c1:
     if st.button("⚽ 推演", use_container_width=True,
                  type="primary" if st.session_state.view == "predict" else "secondary"):
-        st.session_state.view = "predict"
-        st.rerun()
-with c_hist:
+        st.session_state.view = "predict"; st.rerun()
+with c2:
     if st.button("📚 历史", use_container_width=True,
                  type="primary" if st.session_state.view == "history" else "secondary"):
-        st.session_state.view = "history"
-        st.rerun()
-with c_laws:
+        st.session_state.view = "history"; st.rerun()
+with c3:
     if st.button("⚙️ 定律", use_container_width=True,
                  type="primary" if st.session_state.view == "laws" else "secondary"):
-        st.session_state.view = "laws"
-        st.rerun()
+        st.session_state.view = "laws"; st.rerun()
+with c4:
+    if st.button("📋 比赛库", use_container_width=True,
+                 type="primary" if st.session_state.view == "match_db" else "secondary"):
+        st.session_state.view = "match_db"; st.rerun()
 
 st.divider()
 
@@ -268,6 +269,17 @@ def _do_prediction(match: str, prog=None) -> str:
         return "skip"
 
     laws = load_laws(st.session_state.username)
+
+    from core.match_db import get_match
+    manual = get_match(match)
+    manual_odds = None
+    manual_home = manual_away = ""
+    if manual:
+        oh = manual.get("odds_h"); od = manual.get("odds_d"); oa = manual.get("odds_a")
+        if oh and od and oa:
+            manual_odds = (oh, od, oa)
+        manual_home = manual.get("home_team", "")
+        manual_away = manual.get("away_team", "")
 
     if prog: prog.progress(0, text=f"⏳ {match} 搜索中...")
     quant_error = qual_error = ""
@@ -310,10 +322,15 @@ def _do_prediction(match: str, prog=None) -> str:
     uncertainty = rules_result["uncertainty"]
 
     if prog: prog.progress(50, text=f"🧮 {match} 计算中...")
-    odds_data = extract_odds(quant_data)
+    odds_data = extract_odds(quant_data) if quant_data else {}
     lam_h0, lam_a0 = 1.5, 1.2
     odds_tuple = None
-    if odds_data.get("odds_h") and odds_data.get("odds_d") and odds_data.get("odds_a"):
+    if manual_odds:
+        oh, od, oa = manual_odds
+        s = 1/oh+1/od+1/oa
+        lam_h0, lam_a0 = odds_to_lambda((1/oh)/s, (1/od)/s, (1/oa)/s)
+        odds_tuple = manual_odds
+    elif odds_data.get("odds_h") and odds_data.get("odds_d") and odds_data.get("odds_a"):
         oh, od, oa = odds_data["odds_h"], odds_data["odds_d"], odds_data["odds_a"]
         p_h = (1/oh)/(1/oh+1/od+1/oa); p_a = (1/oa)/(1/oh+1/od+1/oa); p_d = (1/od)/(1/oh+1/od+1/oa)
         lam_h0, lam_a0 = odds_to_lambda(p_h, p_d, p_a)
@@ -888,3 +905,42 @@ if st.session_state.view == "laws":
                         st.toast(f"已删除: {law['name']}", icon="🗑️")
                         st.rerun()
             st.divider()
+
+
+# ===================================================================
+#  MATCH DB TAB
+# ===================================================================
+if st.session_state.view == "match_db":
+    st.markdown("#### \u7b14\u8bb0 \u6bd4\u8d5b\u6570\u636e\u5e93")
+    st.info("\u5728 Supabase Dashboard \u2192 SQL Editor \u6267\u884c create_match_data.sql \u521b\u5efa\u8868")
+    from core.match_db import list_matches, delete_match, save_match
+    db_matches = list_matches(st.session_state.username)
+    if not db_matches:
+        st.info("\u6682\u65e0\u624b\u52a8\u5f55\u5165\u7684\u6570\u636e\u3002")
+
+    for m in db_matches:
+        h = m.get("home_team","?"); a = m.get("away_team","?")
+        odds_s = f"\u8d54\u7387{m.get('odds_h','?')}/{m.get('odds_d','?')}/{m.get('odds_a','?')}" if m.get("odds_h") else ""
+        res_s = f"\u5b9e\u9645 {m['actual_h']}-{m['actual_a']}" if m.get("actual_h") is not None else "\u672a\u8d5b"
+        with st.expander(f"{h} vs {a} - {res_s} {odds_s}", expanded=False):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.text_input("\u4e3b\u961f", value=h, key=f"db_h_{m['id']}")
+                st.text_input("\u4e3b\u961f\u4f24\u75c5", value=m.get("home_injuries",""), key=f"db_hi_{m['id']}")
+                st.number_input("\u4e3b\u80dc\u8d54\u7387", value=float(m.get("odds_h") or 1.0), step=0.1, format="%.2f", key=f"db_oh_{m['id']}")
+                st.number_input("\u5b9e\u9645\u4e3b\u961f\u8fdb\u7403", value=int(m.get("actual_h") or 0) if m.get("actual_h") is not None else 0, key=f"db_ah_{m['id']}")
+            with c2:
+                st.text_input("\u5ba2\u961f", value=a, key=f"db_a_{m['id']}")
+                st.text_input("\u5ba2\u961f\u4f24\u75c5", value=m.get("away_injuries",""), key=f"db_ai_{m['id']}")
+                st.number_input("\u5e73\u5c40\u8d54\u7387", value=float(m.get("odds_d") or 1.0), step=0.1, format="%.2f", key=f"db_od_{m['id']}")
+                st.number_input("\u5ba2\u80dc\u8d54\u7387", value=float(m.get("odds_a") or 1.0), step=0.1, format="%.2f", key=f"db_oa_{m['id']}")
+            if st.button("\u4fdd\u5b58", key=f"db_save_{m['id']}"):
+                save_match({"match_name":m["match_name"],"home_team":st.session_state[f"db_h_{m['id']}"],
+                    "away_team":st.session_state[f"db_a_{m['id']}"],"home_injuries":st.session_state[f"db_hi_{m['id']}"],
+                    "away_injuries":st.session_state[f"db_ai_{m['id']}"],
+                    "odds_h":st.session_state[f"db_oh_{m['id']}"],"odds_d":st.session_state[f"db_od_{m['id']}"],
+                    "odds_a":st.session_state[f"db_oa_{m['id']}"],"actual_h":st.session_state[f"db_ah_{m['id']}"],
+                    "actual_a":st.session_state[f"db_aa_{m['id']}"],"username":st.session_state.username})
+                st.success("OK"); st.rerun()
+            if st.button("\u5220\u9664", key=f"db_del_{m['id']}"):
+                delete_match(m["id"]); st.rerun()
