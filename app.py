@@ -381,83 +381,100 @@ def _do_prediction(match: str, prog=None) -> str:
 
 
 
+
 def _parse_match_texts(pre_text, post_text=""):
-    """从DeepSeek结构化输出提取比赛数据"""
+    """Extract match data from DeepSeek output. Supports multiple matches (split by --- or blank lines). Returns list."""
     import re
-    r = {"_warnings":[],"home_team":"","away_team":"","tournament":"","match_time":"",
-         "odds_h":None,"odds_d":None,"odds_a":None,"home_injuries":"","away_injuries":"",
-         "home_coach":"","away_coach":"","home_formation":"","away_formation":"",
-         "actual_h":None,"actual_a":None}
     if not pre_text.strip():
-        r["_warnings"].append("pre match data empty")
-        return r
-    t = pre_text
-    # tournament
-    m = re.search(r'赛事[:\s]*(.+)', t)
-    if m:
-        v = m.group(1).strip()
-        if "2022" in v: r["tournament"] = "世界杯 2022"
-        elif "2024" in v: r["tournament"] = "欧洲杯 2024"
-        else: r["tournament"] = v
-    # kickoff time
-    m = re.search(r'开赛时间[:\s]*(\d{4}[-/]\d{2}[-/]\d{2}[\sT]\d{2}:\d{2})', t)
-    if m: r["match_time"] = m.group(1)
-    # odds
-    m = re.search(r'主胜[:\s]*(\d+\.?\d*).*?平[:\s]*(\d+\.?\d*).*?客胜[:\s]*(\d+\.?\d*)', t, re.DOTALL)
-    if not m: m = re.search(r'Home[:\s]*(\d+\.?\d*).*?Draw[:\s]*(\d+\.?\d*).*?Away[:\s]*(\d+\.?\d*)', t, re.DOTALL)
-    if m:
-        try:
-            h,d,a = float(m.group(1)),float(m.group(2)),float(m.group(3))
-            if 1.1<h<50: r["odds_h"]=h
-            if 1.1<d<50: r["odds_d"]=d
-            if 1.1<a<50: r["odds_a"]=a
-        except: pass
-    # team names
-    for line in t.split("\n"):
-        m = re.search(r'([一-鿿\w]+)\s*(?:vs|VS|vs\.|V|对)\s*([一-鿿\w]+)', line)
+        return []
+
+    def _ps(text):
+        r = {"_warnings":[],"home_team":"","away_team":"","tournament":"","match_time":"",
+             "odds_h":None,"odds_d":None,"odds_a":None,"home_injuries":"","away_injuries":"",
+             "home_coach":"","away_coach":"","home_formation":"","away_formation":"",
+             "actual_h":None,"actual_a":None}
+        if not text.strip():
+            return None
+        t = text
+        # tournament
+        m = re.search(r'赛事[：:\s]*(.+)', t)
         if m:
-            r["home_team"]=m.group(1).strip()
-            r["away_team"]=m.group(2).strip()
-            break
-    # injuries
-    for line in t.split("\n"):
-        ls = line.strip()
-        if "主队" in ls and ("伤病" in ls or "伤停" in ls):
-            p = ls.split(":",1)
-            if len(p)>1: r["home_injuries"] += p[-1].strip() + " "
-        elif "客队" in ls and ("伤病" in ls or "伤停" in ls):
-            p = ls.split(":",1)
-            if len(p)>1: r["away_injuries"] += p[-1].strip() + " "
-    # coaches
-    for line in t.split("\n"):
-        ls = line.strip()
-        if "主队教练" in ls or "主队主教练" in ls:
-            p = ls.split(":",1)
-            if len(p)>1: r["home_coach"] = p[-1].strip()
-        elif "客队教练" in ls or "客队主教练" in ls:
-            p = ls.split(":",1)
-            if len(p)>1: r["away_coach"] = p[-1].strip()
-    # formation
-    for line in t.split("\n"):
-        mf = re.search(r'(\d-\d-\d)', line)
-        if mf:
-            ln = line.strip()
-            if r["home_team"] and r["home_team"] in ln:
-                r["home_formation"] = mf.group(1)
-            elif r["away_team"] and r["away_team"] in ln:
-                r["away_formation"] = mf.group(1)
-    # warnings
-    if not r["home_team"]:
-        r["_warnings"].append("could not parse team names")
-    # post match
-    if post_text.strip():
-        m = re.search(r'(?:最终比分|比分)[:\s]*(\d+)\s*[-:]\s*(\d+)', post_text)
+            v = m.group(1).strip()
+            if "2022" in v: r["tournament"] = "世界杯 2022"
+            elif "2024" in v: r["tournament"] = "欧洲杯 2024"
+            else: r["tournament"] = v
+        # kickoff
+        m = re.search(r'开赛时间[：:\s]*(\d{4}[-/]\d{2}[-/]\d{2}[\sT]\d{2}:\d{2})', t)
+        if m: r["match_time"] = m.group(1)
+        # odds
+        m = re.search(r'主胜[：:\s]*(\d+\.?\d*).*?平[局]?[：:\s]*(\d+\.?\d*).*?客胜[：:\s]*(\d+\.?\d*)', t, re.DOTALL)
+        if not m: m = re.search(r'Home[：:\s]*(\d+\.?\d*).*?Draw[：:\s]*(\d+\.?\d*).*?Away[：:\s]*(\d+\.?\d*)', t, re.DOTALL)
         if m:
             try:
-                r["actual_h"] = int(m.group(1))
-                r["actual_a"] = int(m.group(2))
+                h,d,a = float(m.group(1)),float(m.group(2)),float(m.group(3))
+                if 1.1<h<50: r["odds_h"]=h
+                if 1.1<d<50: r["odds_d"]=d
+                if 1.1<a<50: r["odds_a"]=a
             except: pass
-    return r
+        # team names
+        for line in t.split("\n"):
+            m = re.search(r'([一-鿿\w]+)\s*(?:vs|VS|vs\.|V|对)\s*([一-鿿\w]+)', line)
+            if m:
+                r["home_team"]=m.group(1).strip(); r["away_team"]=m.group(2).strip()
+                break
+        # injuries
+        for line in t.split("\n"):
+            ls = line.strip()
+            if "主队" in ls and ("伤病" in ls or "伤停" in ls):
+                p = ls.split(":",1)
+                if len(p)>1: r["home_injuries"] += p[-1].strip() + " "
+            elif "客队" in ls and ("伤病" in ls or "伤停" in ls):
+                p = ls.split(":",1)
+                if len(p)>1: r["away_injuries"] += p[-1].strip() + " "
+        # coaches
+        for line in t.split("\n"):
+            ls = line.strip()
+            if "主队教练" in ls or "主队主教练" in ls:
+                p = ls.split(":",1)
+                if len(p)>1: r["home_coach"] = p[-1].strip()
+            elif "客队教练" in ls or "客队主教练" in ls:
+                p = ls.split(":",1)
+                if len(p)>1: r["away_coach"] = p[-1].strip()
+        # formation
+        for line in t.split("\n"):
+            mf = re.search(r'(\d-\d-\d)', line)
+            if mf:
+                ln = line.strip()
+                if r["home_team"] and r["home_team"] in ln: r["home_formation"] = mf.group(1)
+                elif r["away_team"] and r["away_team"] in ln: r["away_formation"] = mf.group(1)
+        if not r["home_team"]:
+            r["_warnings"].append("could not parse team names")
+        return r
+
+    # Split by --- or blank lines
+    blocks = re.split(r'\n\s*---+\s*\n|\n{3,}', pre_text.strip())
+    results = []
+    for block in blocks:
+        if not block.strip(): continue
+        parsed = _ps(block)
+        if parsed and (parsed["home_team"] or parsed["home_injuries"] or parsed["odds_h"]):
+            results.append(parsed)
+    if not results:
+        single = _ps(pre_text)
+        if single: results = [single]
+
+    # Post data
+    if post_text.strip():
+        post_blocks = re.split(r'\n\s*---+\s*\n|\n{3,}', post_text.strip())
+        for i, pr in enumerate(results):
+            if i < len(post_blocks):
+                m = re.search(r'(?:最终比分|比分)[：:\s]*(\d+)\s*[-:]\s*(\d+)', post_blocks[i])
+                if m:
+                    try:
+                        pr["actual_h"] = int(m.group(1))
+                        pr["actual_a"] = int(m.group(2))
+                    except: pass
+    return results
 
 def _save_to_match_db(match_name, t1, t2, odds_tuple, is_ko, match_time, analysis="", triggered=None):
     """自动将推演数据保存到比赛数据库"""
@@ -1028,19 +1045,28 @@ if st.session_state.view == "match_db":
         post_text = st.text_area("\u8d5b\u540e\u6570\u636e\uff08\u7c98\u8d34 DeepSeek \u8fd4\u56de\uff0c\u53ef\u9009\uff09", height=100, key="db_post")
 
         if st.button("\u89e3\u6790\u5e76\u4fdd\u5b58", use_container_width=True, type="primary"):
-            parsed = _parse_match_texts(pre_text, post_text)
-            if parsed.get("home_team") and parsed.get("away_team"):
-                mn = f"{parsed['home_team']} vs {parsed['away_team']}"
-                ok = save_match({**parsed, "match_name": mn, "username": st.session_state.username})
-                if ok:
-                    st.success(f"\u5df2\u4fdd\u5b58: {mn}")
-                    for w in parsed.get("_warnings", []):
+            parsed_list = _parse_match_texts(pre_text, post_text)
+            if not parsed_list:
+                st.error("\u65e0\u6cd5\u89e3\u6790\u51fa\u4efb\u4f55\u6bd4\u8d5b\uff0c\u786e\u8ba4\u7c98\u8d34\u7684\u662f\u8d5b\u524d\u6570\u636e")
+            else:
+                ok_count = 0
+                warnings = []
+                for parsed in parsed_list:
+                    if parsed.get("home_team") and parsed.get("away_team"):
+                        mn = f"{parsed['home_team']} vs {parsed['away_team']}"
+                        ok = save_match({**parsed, "match_name": mn, "username": st.session_state.username})
+                        if ok:
+                            ok_count += 1
+                            warnings.extend(parsed.get("_warnings", []))
+                    else:
+                        warnings.append(f"\u672a\u80fd\u89e3\u6790\u961f\u540d: {parsed.get('home_team','?')} vs {parsed.get('away_team','?')}")
+                if ok_count > 0:
+                    st.success(f"\u5df2\u4fdd\u5b58 {ok_count}/{len(parsed_list)} \u573a\u6bd4\u8d5b")
+                    for w in warnings:
                         st.caption(f"\u26a0 {w}")
                     st.rerun()
                 else:
-                    st.error("\u4fdd\u5b58\u5931\u8d25\uff0c\u68c0\u67e5\u662f\u5426\u5df2\u5b58\u5728\u540c\u540d\u6bd4\u8d5b")
-            else:
-                st.error("\u65e0\u6cd5\u89e3\u6790\u51fa\u961f\u540d\uff0c\u786e\u8ba4\u7c98\u8d34\u7684\u662f\u8d5b\u524d\u6570\u636e")
+                    st.error("\u4fdd\u5b58\u5931\u8d25\uff0c\u68c0\u67e5\u6570\u636e\u683c\u5f0f")
 
     with tab_list:
         if not db_matches:
