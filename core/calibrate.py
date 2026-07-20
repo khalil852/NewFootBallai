@@ -348,11 +348,58 @@ def calibrate_record(record: dict, laws: list[dict],
     except Exception:
         pass
 
+    # ── 定律记忆分析：好定律 vs 差定律的模式 ──
+    good_laws = []
+    bad_laws = []
+    for l in laws:
+        tc = l.get("triggers_count") or 0
+        cc = l.get("correct_count") or 0
+        acc = cc / tc if tc >= 5 else None
+        if acc and acc >= 0.60:
+            good_laws.append({"name": l.get("name",""), "tree": l.get("tree",""),
+                              "trigger_mode": l.get("trigger_mode",""), "acc": round(acc, 2),
+                              "triggers": tc, "modifier_map": l.get("modifier_map",{})})
+        elif acc and acc < 0.40:
+            bad_laws.append({"name": l.get("name",""), "tree": l.get("tree",""),
+                             "trigger_mode": l.get("trigger_mode",""), "acc": round(acc, 2),
+                             "triggers": tc, "modifier_map": l.get("modifier_map",{})})
+
+    law_memory = ""
+    if good_laws or bad_laws:
+        law_memory = "## 定律模式分析\n"
+        if good_laws:
+            trees = {}
+            for l in good_laws:
+                t = l["tree"]
+                trees.setdefault(t, []).append(l["name"])
+            law_memory += f"📈 高质定律(准确率≥60%,触发≥5次): {len(good_laws)}条\n"
+            for t, names in sorted(trees.items()):
+                law_memory += f"  🌳 {t}: {', '.join(names[:3])}{'...' if len(names)>3 else ''}\n"
+        if bad_laws:
+            trees_b = {}
+            for l in bad_laws:
+                t = l["tree"]
+                trees_b.setdefault(t, []).append(l["name"])
+            law_memory += f"📉 低质定律(准确率<40%,触发≥5次): {len(bad_laws)}条\n"
+            for t, names in sorted(trees_b.items()):
+                law_memory += f"  🌳 {t}: {', '.join(names[:3])}{'...' if len(names)>3 else ''}\n"
+            law_memory += "⚠️ 提炼新定律时: 避免与低质定律的 triggers/keywords 类似的模式\n"
+        if good_laws:
+            trees_g = {}
+            for l in good_laws:
+                m = list(l.get("modifier_map",{}).keys())
+                mm_str = "+".join(m) if m else "?"
+                trees_g.setdefault(mm_str, []).append(l["name"])
+            best_modifiers = sorted(trees_g.items(), key=lambda x: len(x[1]), reverse=True)[:3]
+            law_memory += "💡 有效定律中最常见的修正目标: "
+            law_memory += ", ".join(f"{m}({len(names)}条)" for m, names in best_modifiers) + "\n"
+
     # ── Step 3: 偏差分析 ──
     calibrate_prompt = (
         f"## 全局偏差趋势\n{bias_text}\n\n"
         f"## 近期校准记录\n{recent_summary}\n\n"
         f"## 当前定律库\n{json.dumps(laws, ensure_ascii=False)}\n\n"
+        f"{law_memory}\n"
         f"## 本场校准\n"
         f"赛后数据:\n{post_summary[:4000]}\n\n"
         f"赛前推演:\n推演比分: {pred.locked_h}-{pred.locked_a}\n"
