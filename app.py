@@ -270,13 +270,14 @@ def _do_prediction(match: str, prog=None) -> str:
 
     laws = load_laws(st.session_state.username)
 
-    # 赔率作为上下文给 LLM，不参与 λ 计算
+    # 赔率：同时喂给 LLM（文本）和 λ 计算（数字）
     odds_context = ""
+    _match_odds = None
     try:
         from core.match_db import get_match as _gm
-        _manual = _gm(match)
-        if _manual and _manual.get("odds_h"):
-            odds_context = f"赔率: 主胜 {_manual['odds_h']} | 平局 {_manual.get('odds_d','?')} | 客胜 {_manual.get('odds_a','?')}"
+        _match_odds = _gm(match)
+        if _match_odds and _match_odds.get("odds_h"):
+            odds_context = f"赔率: 主胜 {_match_odds['odds_h']} | 平局 {_match_odds.get('odds_d','?')} | 客胜 {_match_odds.get('odds_a','?')}"
     except Exception:
         pass
 
@@ -317,9 +318,19 @@ def _do_prediction(match: str, prog=None) -> str:
     uncertainty = rules_result["uncertainty"]
 
     if prog: prog.progress(50, text=f"🧮 {match} 计算中...")
-    # λ 使用默认值，赔率作为文本信号喂给 LLM
+    # λ 用赔率反推（同时赔率原文也喂 LLM）
+    odds_data = extract_odds(quant_data) if quant_data else {}
     lam_h0, lam_a0 = 1.5, 1.2
     odds_tuple = None
+    if _match_odds:
+        oh=_match_odds.get("odds_h"); od=_match_odds.get("odds_d"); oa=_match_odds.get("odds_a")
+        if oh and od and oa:
+            s=1/oh+1/od+1/oa; lam_h0,lam_a0=odds_to_lambda((1/oh)/s,(1/od)/s,(1/oa)/s)
+            odds_tuple=(oh,od,oa)
+    if not odds_tuple and odds_data.get("odds_h"):
+        oh,od,oa = odds_data["odds_h"], odds_data["odds_d"], odds_data["odds_a"]
+        s=1/oh+1/od+1/oa; lam_h0,lam_a0=odds_to_lambda((1/oh)/s,(1/od)/s,(1/oa)/s)
+        odds_tuple=(oh,od,oa)
 
     from core.rules import parse_teams as _parse_teams
     parsed = _parse_teams(match); t1 = parsed[0] or "" if parsed else ""; t2 = parsed[1] or "" if parsed else ""
