@@ -364,7 +364,13 @@ def calibrate_record(record: dict, laws: list[dict],
         f"xG: {xg_h or '?'}-{xg_a or '?'}\n"
         f"技术统计:\n{stats_html}\n"
         f"触发定律: {json.dumps(triggered_names, ensure_ascii=False)}\n\n"
-        f"赛前报告:\n{analysis_report[:3000]}"
+        f"赛前报告:\n{analysis_report[:3000]}\n\n"
+        f"## 赔率一致性分析\n"
+        f"请对照赔率判断: 模型预测方向是否与赔率暗示一致？\n"
+        f"- 一致且正确 → 市场已验证\n"
+        f"- 不一致但正确 → 模型发现市场盲区(提炼定律)\n"
+        f"- 不一致且错误 → 模型在对赌市场(谨慎)\n"
+        f"赔率文本已包含在赛前报告中，请自行分析。"
     )
 
     cr = _deepseek_chat(PROMPT_CALIBRATE, calibrate_prompt, key,

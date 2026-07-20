@@ -270,14 +270,13 @@ def _do_prediction(match: str, prog=None) -> str:
 
     laws = load_laws(st.session_state.username)
 
-    from core.match_db import get_match as _gm
-    manual_odds = None
+    # 赔率作为上下文给 LLM，不参与 λ 计算
+    odds_context = ""
     try:
+        from core.match_db import get_match as _gm
         _manual = _gm(match)
-        if _manual:
-            oh = _manual.get("odds_h"); od = _manual.get("odds_d"); oa = _manual.get("odds_a")
-            if oh and od and oa:
-                manual_odds = (oh, od, oa)
+        if _manual and _manual.get("odds_h"):
+            odds_context = f"赔率: 主胜 {_manual['odds_h']} | 平局 {_manual.get('odds_d','?')} | 客胜 {_manual.get('odds_a','?')}"
     except Exception:
         pass
 
@@ -318,19 +317,9 @@ def _do_prediction(match: str, prog=None) -> str:
     uncertainty = rules_result["uncertainty"]
 
     if prog: prog.progress(50, text=f"🧮 {match} 计算中...")
-    odds_data = extract_odds(quant_data) if quant_data else {}
+    # λ 使用默认值，赔率作为文本信号喂给 LLM
     lam_h0, lam_a0 = 1.5, 1.2
     odds_tuple = None
-    if manual_odds:
-        oh, od, oa = manual_odds
-        s = 1/oh+1/od+1/oa
-        lam_h0, lam_a0 = odds_to_lambda((1/oh)/s, (1/od)/s, (1/oa)/s)
-        odds_tuple = manual_odds
-    elif odds_data.get("odds_h") and odds_data.get("odds_d") and odds_data.get("odds_a"):
-        oh, od, oa = odds_data["odds_h"], odds_data["odds_d"], odds_data["odds_a"]
-        p_h = (1/oh)/(1/oh+1/od+1/oa); p_a = (1/oa)/(1/oh+1/od+1/oa); p_d = (1/od)/(1/oh+1/od+1/oa)
-        lam_h0, lam_a0 = odds_to_lambda(p_h, p_d, p_a)
-        odds_tuple = (oh, od, oa)
 
     from core.rules import parse_teams as _parse_teams
     parsed = _parse_teams(match); t1 = parsed[0] or "" if parsed else ""; t2 = parsed[1] or "" if parsed else ""
@@ -348,9 +337,9 @@ def _do_prediction(match: str, prog=None) -> str:
         pred = predict_match(t1, t2, lam_h0, lam_a0, modifiers, odds_tuple)
 
     if prog: prog.progress(75, text=f"📝 {match} 生成报告...")
-    math_json = json.dumps({"淘汰赛":is_ko, **pred.to_json(), "定律修正因子":{"attack":round(modifiers.attack,3),"defense":round(modifiers.defense,3),"tactical":round(modifiers.tactical,3),"coach_intent":round(modifiers.coach_intent,3),"scenario":round(modifiers.scenario,3),"home_adv":round(modifiers.home_adv,3)},"教练信息":coach_info,"触发定律":triggered,"赔率推导λ":f"{lam_h0:.2f}/{lam_a0:.2f}"}, ensure_ascii=False)
+    math_json = json.dumps({"淘汰赛":is_ko, **pred.to_json(), "定律修正因子":{"attack":round(modifiers.attack,3),"defense":round(modifiers.defense,3),"tactical":round(modifiers.tactical,3),"coach_intent":round(modifiers.coach_intent,3),"scenario":round(modifiers.scenario,3),"home_adv":round(modifiers.home_adv,3)},"教练信息":coach_info,"触发定律":triggered,"赔率(市场)":odds_context}, ensure_ascii=False)
 
-    report_prompt = f"赛前数据:\n{search_report[:6000]}\n\n数学计算结果:\n{json.dumps(pred.to_json(),ensure_ascii=False)}\n修正因子:{json.dumps({k:round(v,3) for k,v in modifiers.__dict__.items()},ensure_ascii=False)}\n触发的定律:{json.dumps([t['name'] for t in triggered],ensure_ascii=False)}\n"
+    report_prompt = f"赛前数据:\n{search_report[:6000]}\n{odds_context}\n\n数学计算结果:\n{json.dumps(pred.to_json(),ensure_ascii=False)}\n修正因子:{json.dumps({k:round(v,3) for k,v in modifiers.__dict__.items()},ensure_ascii=False)}\n触发的定律:{json.dumps([t['name'] for t in triggered],ensure_ascii=False)}\n赔率(市场共识): {odds_context}\n请结合赔率和赛前信息分析比赛。\n"
     analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY, MODEL_FAST, fallback_cfgs=[MODEL_PRO])
     if not analysis:
         analysis = _deepseek_chat(PROMPT_ANALYSIS, report_prompt, DEEPSEEK_KEY, MODEL_FAST)
@@ -919,7 +908,6 @@ if st.session_state.view == "laws":
     col_r, col_f = st.columns([1, 5])
     with col_r:
         if st.button("🔄 刷新", use_container_width=True):
-            st.session_state.pop("laws", None)
             st.rerun()
 
     # 重新加载定律（不受顶部缓存影响）
